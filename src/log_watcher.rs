@@ -60,8 +60,10 @@ impl Patterns {
     }
 }
 
-/// Seconds of log silence before we assume the game has closed.
-const LOG_STALE_SECS: u64 = 45;
+/// Seconds of log silence during an active match before assuming a crash.
+/// Only applied during InMatch/MatchIntro — passive phases (menu, hideout, queue)
+/// produce very little log output and would cause false positives for AFK users.
+const MATCH_STALE_SECS: u64 = 300;
 
 pub struct LogWatcher {
     log_path: PathBuf,
@@ -163,14 +165,20 @@ impl LogWatcher {
 
                 last_pos = file_size;
             } else {
-                // No new bytes — check if the silence has gone on too long.
+                // No new bytes — only flag a crash if we're in an active match phase.
+                // Passive phases (menu, hideout, queue) produce little log output
+                // and would cause false positives for AFK users.
                 let gs_phase = state.lock().unwrap().phase;
-                if gs_phase != GamePhase::NotRunning
-                    && last_activity.elapsed() > Duration::from_secs(LOG_STALE_SECS)
+                let in_active_match = matches!(
+                    gs_phase,
+                    GamePhase::InMatch | GamePhase::MatchIntro
+                );
+                if in_active_match
+                    && last_activity.elapsed() > Duration::from_secs(MATCH_STALE_SECS)
                 {
                     log!(
-                        "[watcher] No log activity for {}s — assuming game closed",
-                        LOG_STALE_SECS
+                        "[watcher] No log activity for {}s during active match — assuming crash",
+                        MATCH_STALE_SECS
                     );
                     let mut gs = state.lock().unwrap();
                     gs.reset();
