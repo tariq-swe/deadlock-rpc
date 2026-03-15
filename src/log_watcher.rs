@@ -1,0 +1,383 @@
+use crate::game_state::{GamePhase, GameState, MatchMode};
+use crate::log;
+use regex::Regex;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+const HIDEOUT_MAPS: &[&str] = &["dl_hideout"];
+const RESYNC_BYTES: u64 = 10 * 1024 * 1024;
+
+struct Patterns {
+    change_game_state: Regex,
+    server_connect: Regex,
+    server_disconnect: Regex,
+    server_shutdown: Regex,
+    map_created_physics: Regex,
+    mm_start: Regex,
+    mm_stop: Regex,
+    host_activate: Regex,
+    loaded_hero: Regex,
+    client_hero_vmdl: Regex,
+    map_info: Regex,
+    app_shutdown: Regex,
+    source2_shutdown: Regex,
+    precaching_heroes: Regex,
+    loop_mode_menu: Regex,
+    lobby_created: Regex,
+    lobby_destroyed: Regex,
+    spectate_broadcast: Regex,
+    player_info: Regex,
+    bot_init: Regex,
+}
+
+impl Patterns {
+    fn new() -> Self {
+        Self {
+            change_game_state: Regex::new(r"ChangeGameState:\s+(\w+)\s+\((\d+)\)").unwrap(),
+            server_connect: Regex::new(r"\[Client\] CL:\s+Connected to '([^']+)'").unwrap(),
+            server_disconnect: Regex::new(r"\[Client\] Disconnecting from server:\s+(\S+)").unwrap(),
+            server_shutdown: Regex::new(r"\[Server\] SV:\s+Server shutting down:\s+(\S+)").unwrap(),
+            map_created_physics: Regex::new(r"\[Client\] Created physics for\s+(\S+)").unwrap(),
+            mm_start: Regex::new(r"\[GCClient\] Send msg 9010 \(k_EMsgClientToGCStartMatchmaking\)").unwrap(),
+            mm_stop: Regex::new(r"\[GCClient\] Send msg 9012 \(k_EMsgClientToGCStopMatchmaking\)").unwrap(),
+            host_activate: Regex::new(r"\[HostStateManager\] Host activate:.*\(([^)]+)\)").unwrap(),
+            loaded_hero: Regex::new(r"\[Server\] Loaded hero \d+/(hero_\w+)").unwrap(),
+            client_hero_vmdl: Regex::new(r"VMDL Camera Pose Success!.*models/heroes(?:_wip|_staging)?/(\w+)/").unwrap(),
+            map_info: Regex::new(r#"\[Client\] Map:\s+"([^"]+)""#).unwrap(),
+            app_shutdown: Regex::new(r"Dispatching EventAppShutdown_t").unwrap(),
+            source2_shutdown: Regex::new(r"Source2Shutdown").unwrap(),
+            precaching_heroes: Regex::new(r"Precaching (\d+) heroes in CCitadelGameRules").unwrap(),
+            loop_mode_menu: Regex::new(r"LoopMode:\s*menu").unwrap(),
+            lobby_created: Regex::new(r"Lobby\s+\d+\s+for\s+Match\s+\d+\s+created").unwrap(),
+            lobby_destroyed: Regex::new(r"Lobby\s+\d+\s+for\s+Match\s+\d+\s+destroyed").unwrap(),
+            spectate_broadcast: Regex::new(r"Playing Broadcast").unwrap(),
+            player_info: Regex::new(r"\[Client\] Players:\s+(\d+)\s+\(\d+ bots\)\s+/\s+\d+ humans").unwrap(),
+            bot_init: Regex::new(r"Initializing bot for player slot \d+:\s+k_ECitadelBotDifficulty_\w+").unwrap(),
+        }
+    }
+}
+
+/// Seconds of log silence before we assume the game has closed.
+const LOG_STALE_SECS: u64 = 45;
+
+pub struct LogWatcher {
+    log_path: PathBuf,
+    /// Captured at construction; used to detect logs left over from a prior session.
+    app_start: std::time::SystemTime,
+}
+
+impl LogWatcher {
+    pub fn new(log_path: PathBuf) -> Self {
+        Self {
+            log_path,
+            app_start: std::time::SystemTime::now(),
+        }
+    }
+
+    pub fn run(&self, state: Arc<Mutex<GameState>>) {
+        let patterns = Patterns::new();
+        let mut last_pos: u64 = 0;
+        let mut initialized = false;
+        let mut last_activity = std::time::Instant::now();
+
+        loop {
+            if !self.log_path.exists() {
+                if initialized {
+                    log!("[watcher] Log file gone — game closed, resetting state");
+                    let mut gs = state.lock().unwrap();
+                    gs.reset();
+                    initialized = false;
+                    last_pos = 0;
+                }
+                thread::sleep(Duration::from_secs(2));
+                continue;
+            }
+
+            let file_size = std::fs::metadata(&self.log_path)
+                .map(|m| m.len())
+                .unwrap_or(0);
+
+            if !initialized {
+                // Only trust the log if it was written to after this app started.
+                // A log last modified before our start is a leftover from a prior
+                // session — the game is not currently running.
+                let log_mtime = std::fs::metadata(&self.log_path)
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH);
+
+                if log_mtime > self.app_start {
+                    let start = file_size.saturating_sub(RESYNC_BYTES);
+                    let lines = read_lines_from(&self.log_path, start, start > 0);
+                    let mut gs = state.lock().unwrap();
+                    gs.enter_main_menu();
+                    for line in &lines {
+                        process_line(line.trim(), &mut gs, &patterns);
+                    }
+                    log!(
+                        "[resync] Live log — phase={:?} hero={:?} ({} lines)",
+                        gs.phase, gs.hero_key, lines.len()
+                    );
+                } else {
+                    log!("[resync] Stale log (written before app started) — waiting for game...");
+                    // Leave GameState as NotRunning.
+                }
+
+                last_pos = file_size;
+                last_activity = std::time::Instant::now();
+                initialized = true;
+                continue;
+            }
+
+            if file_size < last_pos {
+                log!("[watcher] Log truncated, resyncing...");
+                initialized = false;
+                last_pos = 0;
+                continue;
+            }
+
+            if file_size > last_pos {
+                last_activity = std::time::Instant::now();
+                let lines = read_lines_from(&self.log_path, last_pos, false);
+
+                if !lines.is_empty() {
+                    let mut gs = state.lock().unwrap();
+                    let prev_hero = gs.hero_key.clone();
+                    let prev_phase = gs.phase;
+                    gs.live_lines_seen += lines.len() as u64;
+                    for line in &lines {
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() {
+                            process_line(trimmed, &mut gs, &patterns);
+                        }
+                    }
+                    if gs.phase != prev_phase {
+                        log!("[state] {:?} → {:?}", prev_phase, gs.phase);
+                    }
+                    if gs.hero_key != prev_hero {
+                        log!("[hero]  {:?} → {:?}", prev_hero, gs.hero_key);
+                    }
+                }
+
+                last_pos = file_size;
+            } else {
+                // No new bytes — check if the silence has gone on too long.
+                let gs_phase = state.lock().unwrap().phase;
+                if gs_phase != GamePhase::NotRunning
+                    && last_activity.elapsed() > Duration::from_secs(LOG_STALE_SECS)
+                {
+                    log!(
+                        "[watcher] No log activity for {}s — assuming game closed",
+                        LOG_STALE_SECS
+                    );
+                    let mut gs = state.lock().unwrap();
+                    gs.reset();
+                    initialized = false;
+                    last_pos = 0;
+                    last_activity = std::time::Instant::now();
+                }
+            }
+
+            thread::sleep(Duration::from_millis(500));
+        }
+    }
+}
+
+/// Opens the log file, seeks to `offset`, and returns all complete lines from that point.
+/// If `skip_partial` is true, discards the first (potentially incomplete) line after seeking.
+fn read_lines_from(path: &std::path::Path, offset: u64, skip_partial: bool) -> Vec<String> {
+    let Ok(file) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    let mut br = BufReader::new(file);
+    br.seek(SeekFrom::Start(offset)).ok();
+    if skip_partial {
+        let mut buf = String::new();
+        br.read_line(&mut buf).ok();
+    }
+    br.lines().flatten().collect()
+}
+
+/// Normalise a raw hero key from the log: lowercase, strip version suffix (_v2, _v3, …),
+/// and ensure a hero_ prefix so the result is always a valid API class_name.
+fn normalize_hero_key(raw: &str) -> String {
+    let s = raw.to_lowercase();
+    // Strip trailing version suffix
+    let s = if let Some(pos) = s.rfind('_') {
+        let suffix = &s[pos + 1..];
+        let is_version = suffix.starts_with('v')
+            && suffix.len() > 1
+            && suffix[1..].bytes().all(|b| b.is_ascii_digit());
+        if is_version { s[..pos].to_string() } else { s }
+    } else {
+        s
+    };
+    // Ensure hero_ prefix
+    if s.starts_with("hero_") { s } else { format!("hero_{s}") }
+}
+
+fn apply_map(state: &mut GameState, map_name: &str) {
+    if state.phase == GamePhase::Spectating {
+        return;
+    }
+
+    let map_lower = map_name.to_lowercase();
+    if map_lower.is_empty() || map_lower == "<empty>" {
+        return;
+    }
+
+    state.map_name = Some(map_lower.clone());
+
+    if HIDEOUT_MAPS.contains(&map_lower.as_str()) {
+        state.enter_hideout();
+        state.map_name = Some(map_lower);
+        return;
+    }
+
+    // Set mode from map name where it's unambiguous
+    match map_lower.as_str() {
+        "new_player_basics" => state.match_mode = MatchMode::TrainingRange,
+        "street_test" | "street_test_bridge" => state.match_mode = MatchMode::Standard,
+        _ => {}
+    }
+
+    // Any non-hideout named map means a match is loading
+    if matches!(
+        state.phase,
+        GamePhase::MatchIntro | GamePhase::InQueue | GamePhase::MainMenu | GamePhase::Hideout
+    ) {
+        state.phase = GamePhase::InMatch;
+        state.prepare_match_hero_tracking();
+        state.hideout_loaded = false;
+    }
+}
+
+fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
+    let is_hideout_map = state
+        .map_name
+        .as_deref()
+        .map(|m| HIDEOUT_MAPS.contains(&m))
+        .unwrap_or(false);
+
+    if let Some(m) = p.map_info.captures(line) {
+        apply_map(state, m.get(1).unwrap().as_str());
+    } else if let Some(m) = p.map_created_physics.captures(line) {
+        apply_map(state, m.get(1).unwrap().as_str());
+    } else if p.mm_start.is_match(line) {
+        if matches!(
+            state.phase,
+            GamePhase::Hideout | GamePhase::MainMenu
+        ) {
+            state.enter_queue();
+        }
+    } else if p.mm_stop.is_match(line) {
+        if state.phase == GamePhase::InQueue {
+            state.leave_queue();
+        }
+    } else if p.lobby_created.is_match(line) {
+        state.prepare_match_hero_tracking();
+        if matches!(
+            state.phase,
+            GamePhase::MainMenu | GamePhase::Hideout | GamePhase::InQueue | GamePhase::MatchIntro
+        ) {
+            state.enter_match_intro();
+        }
+    } else if p.lobby_destroyed.is_match(line) {
+        state.end_match();
+    } else if p.spectate_broadcast.is_match(line) {
+        state.enter_spectating();
+        state.hideout_loaded = false;
+    } else if let Some(m) = p.server_connect.captures(line) {
+        let addr = m.get(1).unwrap().as_str();
+        let is_real = !addr.to_lowercase().contains("loopback");
+        if is_real {
+            state.prepare_match_hero_tracking();
+            if matches!(
+                state.phase,
+                GamePhase::MainMenu | GamePhase::Hideout | GamePhase::InQueue | GamePhase::MatchIntro
+            ) {
+                state.enter_match_intro();
+            }
+        }
+    } else if let Some(m) = p.loaded_hero.captures(line) {
+        let hero = normalize_hero_key(m.get(1).unwrap().as_str());
+        let is_hideout = matches!(state.phase, GamePhase::Hideout);
+        if !(is_hideout && !state.hideout_loaded) {
+            state.apply_hero_signal(&hero);
+        }
+    } else if let Some(m) = p.client_hero_vmdl.captures(line) {
+        let hero = normalize_hero_key(m.get(1).unwrap().as_str());
+        state.apply_hero_signal(&hero);
+    } else if let Some(m) = p.server_disconnect.captures(line) {
+        let reason = m.get(1).unwrap().as_str().to_uppercase();
+        if reason.contains("EXITING") {
+            state.reset();
+        } else if !reason.contains("LOOPDEACTIVATE")
+            && matches!(
+                state.phase,
+                GamePhase::InMatch | GamePhase::MatchIntro | GamePhase::Spectating
+            )
+        {
+            state.end_match();
+        }
+    } else if p.loop_mode_menu.is_match(line) {
+        if matches!(
+            state.phase,
+            GamePhase::InMatch | GamePhase::MatchIntro | GamePhase::Spectating
+        ) {
+            state.end_match();
+        }
+    } else if let Some(m) = p.change_game_state.captures(line) {
+        if state.phase != GamePhase::Spectating && !is_hideout_map {
+            let state_name = m.get(1).unwrap().as_str().to_lowercase();
+            let state_id: u32 = m.get(2).unwrap().as_str().parse().unwrap_or(0);
+
+            if !state.hideout_loaded {
+                if state_name == "matchintro" || state_id == 4 {
+                    state.enter_match_intro();
+                } else if state_name == "gameinprogress"
+                    || state_name == "inprogress"
+                    || state_id == 7
+                {
+                    state.start_match();
+                } else if state_name == "postgame" || state_id == 6 {
+                    state.end_match();
+                }
+            }
+        }
+    } else if let Some(m) = p.host_activate.captures(line) {
+        let map_name = m.get(1).unwrap().as_str().to_lowercase();
+        if HIDEOUT_MAPS.contains(&map_name.as_str()) {
+            state.hideout_loaded = true;
+        }
+    } else if let Some(m) = p.server_shutdown.captures(line) {
+        let reason = m.get(1).unwrap().as_str().to_uppercase();
+        if reason.contains("EXITING") {
+            state.reset();
+        }
+    } else if p.app_shutdown.is_match(line) || p.source2_shutdown.is_match(line) {
+        state.reset();
+    } else if let Some(m) = p.precaching_heroes.captures(line) {
+        let count: u32 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
+        if count > 0 {
+            state.hideout_loaded = false;
+        }
+    } else if let Some(m) = p.player_info.captures(line) {
+        if state.phase != GamePhase::Spectating {
+            let player_count: u32 = m.get(1).unwrap().as_str().parse::<u32>().unwrap_or(0);
+            if matches!(state.match_mode, MatchMode::Unknown | MatchMode::BotMatch) {
+                if player_count >= 9 {
+                    state.match_mode = MatchMode::Standard;
+                } else if player_count >= 5 {
+                    state.match_mode = MatchMode::StreetBrawl;
+                }
+            }
+        }
+    } else if p.bot_init.is_match(line) {
+        if state.phase != GamePhase::Spectating && state.match_mode == MatchMode::Unknown {
+            state.match_mode = MatchMode::BotMatch;
+        }
+    }
+}
