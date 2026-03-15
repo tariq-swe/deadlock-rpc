@@ -6,6 +6,12 @@ Discord Rich Presence for Deadlock — automatically shows your current hero, ga
 
 ---
 
+## Preview
+
+![Deadlock RPC in action](assets/preview.png)
+
+---
+
 ## Features
 
 - **Hero display** — shows your current hero's name and card image
