@@ -205,7 +205,7 @@ fn read_lines_from(path: &std::path::Path, offset: u64, skip_partial: bool) -> V
         let mut buf = String::new();
         br.read_line(&mut buf).ok();
     }
-    br.lines().flatten().collect()
+    br.lines().map_while(Result::ok).collect()
 }
 
 /// Normalise a raw hero key from the log: lowercase, strip version suffix (_v2, _v3, …),
@@ -312,7 +312,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
     } else if let Some(m) = p.loaded_hero.captures(line) {
         let hero = normalize_hero_key(m.get(1).unwrap().as_str());
         let is_hideout = matches!(state.phase, GamePhase::Hideout);
-        if !(is_hideout && !state.hideout_loaded) {
+        if !is_hideout || state.hideout_loaded {
             state.apply_hero_signal(&hero);
         }
     } else if let Some(m) = p.client_hero_vmdl.captures(line) {
@@ -383,9 +383,10 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
                 }
             }
         }
-    } else if p.bot_init.is_match(line) {
-        if state.phase != GamePhase::Spectating && state.match_mode == MatchMode::Unknown {
-            state.match_mode = MatchMode::BotMatch;
-        }
+    } else if p.bot_init.is_match(line)
+        && state.phase != GamePhase::Spectating
+        && state.match_mode == MatchMode::Unknown
+    {
+        state.match_mode = MatchMode::BotMatch;
     }
 }
