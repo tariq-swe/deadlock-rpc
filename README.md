@@ -127,4 +127,10 @@ Bug reports with the contents of `logs/deadlock-rpc.log` are especially helpful 
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by, or connected to Valve Corporation or the Deadlock development team in any way. Deadlock and all related assets are property of Valve Corporation. Hero images and data are sourced from the community-maintained [Deadlock API](https://deadlock-api.com).
+This project is not affiliated with, endorsed by, or connected to Valve Corporation or the Deadlock development team in any way.
+
+**Deadlock**, the Deadlock logo, all hero names, hero images, and all related in-game assets are the property of **Valve Corporation**. All rights reserved.
+
+Hero images and game data displayed in the Discord presence are sourced from the community-maintained [Deadlock API](https://deadlock-api.com) and are the intellectual property of Valve Corporation. They are used here solely for non-commercial, informational display within Discord Rich Presence and remain the property of their respective owners.
+
+This project does not distribute, modify, or claim ownership of any Valve assets. If you are a rights holder and have concerns, please open an issue and they will be addressed promptly.

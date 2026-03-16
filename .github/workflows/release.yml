@@ -50,6 +50,7 @@ jobs:
         run: |
           mkdir -p package/deadlock-rpc/logs
           cp target/${{ matrix.target }}/release/${{ matrix.binary }} package/deadlock-rpc/deadlock-rpc
+          cp -r assets package/deadlock-rpc/assets
           cd package && zip -r ../${{ matrix.zip }} deadlock-rpc/
 
       - name: Package (Windows)
@@ -57,6 +58,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path package\deadlock-rpc\logs | Out-Null
           Copy-Item target\${{ matrix.target }}\release\${{ matrix.binary }} package\deadlock-rpc\deadlock-rpc.exe
+          Copy-Item -Recurse assets package\deadlock-rpc\assets
           Compress-Archive -Path package\deadlock-rpc -DestinationPath ${{ matrix.zip }}
 
       - name: Upload artifact

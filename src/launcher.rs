@@ -50,6 +50,12 @@ pub fn install_shortcut() {
     }
 }
 
+#[cfg(not(debug_assertions))]
+fn icon_path(exe: &std::path::Path, filename: &str) -> Option<PathBuf> {
+    let p = exe.parent()?.join("assets").join(filename);
+    if p.exists() { Some(p) } else { None }
+}
+
 #[cfg(all(unix, not(debug_assertions)))]
 fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let apps_dir = dirs::home_dir()
@@ -58,12 +64,17 @@ fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn s
 
     std::fs::create_dir_all(&apps_dir)?;
 
+    let icon_line = icon_path(exe, "icon.png")
+        .map(|p| format!("Icon={}\n", p.display()))
+        .unwrap_or_default();
+
     let desktop = format!(
         "[Desktop Entry]\n\
          Version=1.0\n\
          Name=Deadlock RPC\n\
          Comment=Discord Rich Presence for Deadlock\n\
          Exec={exe}\n\
+         {icon_line}\
          Terminal=false\n\
          Type=Application\n\
          Categories=Game;\n",
@@ -85,9 +96,13 @@ fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn s
     let desktop = dirs::desktop_dir().ok_or("could not find Desktop directory")?;
     let lnk = desktop.join("Deadlock RPC.lnk");
 
+    let icon_part = icon_path(exe, "icon.ico")
+        .map(|p| format!("$s.IconLocation='{}';", p.display()))
+        .unwrap_or_default();
+
     // Use PowerShell to create a proper .lnk shortcut
     let script = format!(
-        r#"$s=(New-Object -COM WScript.Shell).CreateShortcut('{lnk}');$s.TargetPath='{exe}';$s.Save()"#,
+        r#"$s=(New-Object -COM WScript.Shell).CreateShortcut('{lnk}');$s.TargetPath='{exe}';{icon_part}$s.Save()"#,
         lnk = lnk.display(),
         exe = exe.display(),
     );
