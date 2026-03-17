@@ -103,7 +103,7 @@ Once set, you can launch Deadlock normally and then run Deadlock RPC with the `-
 Requires [Rust](https://rustup.rs) stable.
 
 ```bash
-git clone https://github.com/your-username/deadlock-rpc
+git clone https://github.com/tariq-swe/deadlock-rpc.git
 cd deadlock-rpc
 cargo build --release
 ./target/release/deadlock-rpc
