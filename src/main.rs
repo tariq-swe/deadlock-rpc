@@ -6,12 +6,16 @@ mod launcher;
 mod logger;
 mod log_watcher;
 mod steam;
+mod tray;
 
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use game_state::{GamePhase, GameState, MatchMode};
 use hero_api::{HeroCache, HeroData};
 use log_watcher::LogWatcher;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use std::time::Duration;
 
@@ -85,35 +89,11 @@ fn exit_discord(client: &mut DiscordIpcClient) {
     let _ = client.close();
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
-    let no_launch = args.iter().any(|a| a == "--no-launch");
-
-    // Ensure only one instance runs at a time.
-    let _instance_lock = acquire_single_instance_lock();
-
-    logger::init();
-
-    // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
-    #[cfg(not(debug_assertions))]
-    launcher::install_shortcut();
-
-    if !no_launch {
-        launcher::launch_deadlock();
-    }
-
-    let log_path = steam::find_console_log();
-    log!("[deadlock-rpc] Monitoring: {}", log_path.display());
-
-    let state = Arc::new(Mutex::new(GameState::new()));
-
-    {
-        let state = Arc::clone(&state);
-        let log_path = log_path.clone();
-        thread::spawn(move || LogWatcher::new(log_path).run(state));
-    }
-
+fn run_rpc_loop(
+    state: Arc<Mutex<GameState>>,
+    game_launched: Arc<AtomicBool>,
+    no_launch: bool,
+) {
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
@@ -134,6 +114,8 @@ fn main() {
         };
 
         if phase != GamePhase::NotRunning {
+            // Signal the tray icon to close now that the game is up.
+            game_launched.store(true, Ordering::Relaxed);
             game_was_running = true;
         } else if game_was_running {
             log!("[deadlock-rpc] Game closed, exiting.");
@@ -185,5 +167,55 @@ fn main() {
         }
 
         thread::sleep(Duration::from_secs(5));
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    let no_launch = args.iter().any(|a| a == "--no-launch");
+
+    // Ensure only one instance runs at a time.
+    let _instance_lock = acquire_single_instance_lock();
+
+    logger::init();
+
+    // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
+    #[cfg(not(debug_assertions))]
+    launcher::install_shortcut();
+
+    if !no_launch {
+        launcher::launch_deadlock();
+    }
+
+    let log_path = steam::find_console_log();
+    log!("[deadlock-rpc] Monitoring: {}", log_path.display());
+
+    let state = Arc::new(Mutex::new(GameState::new()));
+    let game_launched = Arc::new(AtomicBool::new(false));
+
+    // Spawn log watcher thread.
+    {
+        let state = Arc::clone(&state);
+        thread::spawn(move || LogWatcher::new(log_path).run(state));
+    }
+
+    // Spawn Discord RPC loop on a background thread so the main thread is free
+    // to run the tray icon event loop (required on Linux/GTK).
+    {
+        let state = Arc::clone(&state);
+        let game_launched = Arc::clone(&game_launched);
+        thread::spawn(move || run_rpc_loop(state, game_launched, no_launch));
+    }
+
+    // Show a "Launching Deadlock..." tray icon on the main thread until the
+    // game is detected as running. On Linux, GTK must run on the main thread.
+    if !no_launch {
+        tray::run_launching_tray(game_launched);
+    }
+
+    // Tray is gone; stay alive until the RPC thread calls process::exit.
+    loop {
+        thread::sleep(Duration::from_secs(60));
     }
 }
