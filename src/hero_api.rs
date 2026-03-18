@@ -93,7 +93,7 @@ fn dict_lookup(asset_key: &str) -> Option<&'static str> {
         "hero_viscous"  => Some("Viscous"),
         "hero_warden"   => Some("Warden"),
         "hero_yamato"   => Some("Yamato"),
-        "hero_orion"    => Some("Grey Talon"),
+        "hero_archer"    => Some("Grey Talon"),
         "hero_digger"    => Some("Mo & Krill"),
         "hero_synth"    => Some("Pocket"),
         "hero_chrono"   => Some("Paradox"),
