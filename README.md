@@ -22,6 +22,7 @@ Discord Rich Presence for Deadlock — automatically shows your current hero, ga
 - **Auto-launch** — launches Deadlock with the required flag automatically
 - **Self-installing** — creates a desktop shortcut on first run, no extra steps needed
 - **Auto-exit** — closes itself when you close Deadlock
+- **Fully customizable** — presence text, timer, hero display, poll rate, and more via `config.toml`
 
 ---
 
@@ -43,7 +44,7 @@ When state changes are detected, the Discord presence is updated via Discord's I
 Deadlock RPC is built in **Rust**, chosen specifically for its minimal runtime overhead and zero garbage collection pauses. The application:
 
 - Reads only the **tail of the log file** — it does not load the entire file into memory
-- Polls for changes every **500ms** using standard file I/O, not filesystem watchers
+- Polls for changes every **500ms** by default (configurable) using standard file I/O, not filesystem watchers
 - Updates Discord presence only when **state actually changes** — no redundant IPC calls
 - Runs entirely in the **background** with negligible CPU and memory usage
 - Has **no impact on game performance or FPS** — it operates independently of the game process
@@ -77,6 +78,100 @@ From this point forward, use the **Deadlock RPC** shortcut instead of launching 
 | Flag | Description |
 |------|-------------|
 | `--no-launch` | Start the RPC monitor without launching Deadlock |
+
+---
+
+## ✦ Customization
+
+On first run, Deadlock RPC creates a **`config.toml`** file in the same folder as the executable. Every option is documented inside it. Edit it with any text editor — changes take effect on the next launch.
+
+> **Tip:** You don't need to include every option. Any key you leave out or delete falls back to its default automatically.
+
+### Behavior
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `general.auto_launch` | `true` | Launch Deadlock automatically on startup. Set `false` to behave like `--no-launch` every time. |
+| `general.auto_exit` | `true` | Exit when the game closes. Set `false` to keep the process running. |
+| `general.launch_timeout_s` | `120` | Seconds to wait for the game to appear before giving up. |
+| `general.log_poll_interval_ms` | `500` | How often (ms) to check the game log for new events. Lower = faster updates. |
+| `general.presence_update_interval_s` | `5` | How often (seconds) to refresh the Discord presence card. |
+
+### Presence display
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `presence.show_elapsed_timer` | `true` | Show or hide the elapsed time counter. |
+| `presence.show_hero` | `true` | Show the hero image and name. Set `false` to always display the Deadlock logo. |
+| `presence.details_with_hero` | `"Playing as {hero}"` | Top line of the presence card when a hero is known. |
+| `presence.details_no_hero` | `"{phase}"` | Top line when no hero is known (menus, post-match, etc.). |
+
+### Per-phase status strings
+
+These control the bottom line of the presence card. Edit any or all of them:
+
+| Key | Default |
+|-----|---------|
+| `presence.status.not_running` | `"Not Running"` |
+| `presence.status.main_menu` | `"Browsing the Main Menu"` |
+| `presence.status.in_hideout` | `"In the Hideout"` |
+| `presence.status.in_queue` | `"Searching for a Match..."` |
+| `presence.status.match_intro` | `"{mode} • Loading into Match"` |
+| `presence.status.in_match` | `"{mode} • Battling in {location}"` |
+| `presence.status.in_match_location` | `"the Cursed Apple"` |
+| `presence.status.post_match` | `"Reviewing Match Results"` |
+| `presence.status.spectating` | `"Watching a Match"` |
+
+### Images
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `images.default_large_image` | `"deadlock_logo"` | Large image asset key when no hero image is shown. |
+| `images.default_large_text` | `"Deadlock"` | Tooltip for the large image when no hero is shown. |
+| `images.small_image` | `"deadlock_logo"` | Small corner overlay image asset key. |
+| `images.small_text` | `"Deadlock"` | Tooltip for the small corner image. |
+
+### Template variables
+
+Some strings support `{variable}` placeholders that are filled in at runtime:
+
+| Variable | Available in | Value |
+|----------|-------------|-------|
+| `{hero}` | `details_with_hero`, `in_hideout` | Hero display name, e.g. `Vindicta` |
+| `{phase}` | `details_no_hero` | Current phase label, e.g. `Post Match` |
+| `{mode}` | `match_intro`, `in_match` | Match mode, e.g. `Standard Match` |
+| `{location}` | `in_match` | Value of `in_match_location` |
+
+### Examples
+
+**Minimal presence — no hero name, no timer:**
+```toml
+[presence]
+show_elapsed_timer = false
+details_with_hero  = "Playing Deadlock"
+details_no_hero    = "Playing Deadlock"
+```
+
+**Custom in-match status:**
+```toml
+[presence.status]
+in_match          = "Grinding {mode}"
+in_match_location = "the streets"   # unused if you remove {location} from in_match
+in_queue          = "Waiting for a game..."
+```
+
+**Slower polling for even lower overhead:**
+```toml
+[general]
+log_poll_interval_ms       = 1000
+presence_update_interval_s = 10
+```
+
+**Keep the app open after the game closes (useful if you restart often):**
+```toml
+[general]
+auto_exit = false
+```
 
 ---
 

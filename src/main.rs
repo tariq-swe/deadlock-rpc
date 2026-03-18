@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+mod config;
 mod game_state;
 mod hero_api;
 mod launcher;
@@ -34,35 +35,37 @@ fn connect_discord(app_id: &str) -> DiscordIpcClient {
 }
 
 fn build_activity<'a>(
-    phase: GamePhase,
+    details: &'a str,
     hero_data: Option<&'a HeroData>,
     status: &'a str,
     start_time: Option<i64>,
+    img_cfg: &'a config::ImagesConfig,
+    show_elapsed_timer: bool,
 ) -> activity::Activity<'a> {
-    let details: String = match hero_data {
-        Some(d) => format!("Playing as {}", d.name),
-        None => phase.description().to_string(),
-    };
-
     let large_image = hero_data
         .filter(|d| !d.icon_url.is_empty())
         .map(|d| d.icon_url.as_str())
-        .unwrap_or("deadlock_logo");
-    let large_text = hero_data.map(|d| d.name.as_str()).unwrap_or("Deadlock");
+        .unwrap_or(img_cfg.default_large_image.as_str());
+
+    let large_text = hero_data
+        .map(|d| d.name.as_str())
+        .unwrap_or(img_cfg.default_large_text.as_str());
 
     let assets = activity::Assets::new()
         .large_image(large_image)
         .large_text(large_text)
-        .small_image("deadlock_logo")
-        .small_text("Deadlock");
+        .small_image(img_cfg.small_image.as_str())
+        .small_text(img_cfg.small_text.as_str());
 
     let mut act = activity::Activity::new()
         .details(details)
         .state(status)
         .assets(assets);
 
-    if let Some(ts) = start_time {
-        act = act.timestamps(activity::Timestamps::new().start(ts));
+    if show_elapsed_timer {
+        if let Some(ts) = start_time {
+            act = act.timestamps(activity::Timestamps::new().start(ts));
+        }
     }
 
     act
@@ -88,12 +91,16 @@ fn exit_discord(client: &mut DiscordIpcClient) {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    let no_launch = args.iter().any(|a| a == "--no-launch");
-
     // Ensure only one instance runs at a time.
     let _instance_lock = acquire_single_instance_lock();
 
     logger::init();
+
+    let cfg = config::load();
+    log!("[config] Loaded from config.toml");
+
+    // --no-launch CLI flag always overrides auto_launch, even if config enables it.
+    let no_launch = args.iter().any(|a| a == "--no-launch") || !cfg.general.auto_launch;
 
     // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
     #[cfg(not(debug_assertions))]
@@ -111,7 +118,8 @@ fn main() {
     {
         let state = Arc::clone(&state);
         let log_path = log_path.clone();
-        thread::spawn(move || LogWatcher::new(log_path).run(state));
+        let poll_ms = cfg.general.log_poll_interval_ms;
+        thread::spawn(move || LogWatcher::new(log_path, poll_ms).run(state));
     }
 
     log!("[discord] Connecting...");
@@ -120,12 +128,17 @@ fn main() {
     let mut last_state: Option<(GamePhase, MatchMode, Option<String>)> = None;
     let mut game_was_running = false;
 
-    // If we launched the game, give it up to 2 minutes to appear before giving up.
+    // If we launched the game, give it up to `launch_timeout_s` to appear before giving up.
     let launch_deadline = if !no_launch {
-        Some(std::time::Instant::now() + Duration::from_secs(120))
+        Some(
+            std::time::Instant::now()
+                + Duration::from_secs(cfg.general.launch_timeout_s),
+        )
     } else {
         None
     };
+
+    let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
 
     loop {
         let (phase, match_mode, hero_key, start_time) = {
@@ -136,12 +149,17 @@ fn main() {
         if phase != GamePhase::NotRunning {
             game_was_running = true;
         } else if game_was_running {
-            log!("[deadlock-rpc] Game closed, exiting.");
-            exit_discord(&mut client);
-            std::process::exit(0);
+            log!("[deadlock-rpc] Game closed.");
+            if cfg.general.auto_exit {
+                exit_discord(&mut client);
+                std::process::exit(0);
+            }
         } else if let Some(deadline) = launch_deadline {
             if std::time::Instant::now() > deadline {
-                log!("[deadlock-rpc] Game did not launch within 2 minutes, exiting.");
+                log!(
+                    "[deadlock-rpc] Game did not launch within {}s, exiting.",
+                    cfg.general.launch_timeout_s
+                );
                 exit_discord(&mut client);
                 std::process::exit(0);
             }
@@ -149,20 +167,35 @@ fn main() {
 
         let current = (phase, match_mode, hero_key.clone());
         if last_state.as_ref() == Some(&current) {
-            thread::sleep(Duration::from_secs(5));
+            thread::sleep(update_interval);
             continue;
         }
 
-        let hero_data: Option<&HeroData> = if phase.shows_hero() {
+        // Respect show_hero: if disabled, never pass hero data for display.
+        let effective_hero_data: Option<&HeroData> = if cfg.presence.show_hero && phase.shows_hero() {
             hero_key.as_deref().and_then(|k| hero_cache.get_or_fetch(k))
         } else {
-            None::<&HeroData>
+            None
         };
 
-        let hideout_text = hero_data.map(|d| d.hideout_text.as_str());
+        // Clone the name so we can drop the hero_cache borrow before locking state.
+        let hero_name_owned: Option<String> = effective_hero_data.map(|d| d.name.clone());
+        let hero_name: Option<&str> = hero_name_owned.as_deref();
+
+        let hideout_text: Option<&str> = effective_hero_data.map(|d| d.hideout_text.as_str());
+
         let status = {
             let gs = state.lock().unwrap();
-            gs.presence_status(hideout_text)
+            gs.presence_status(hideout_text, hero_name, &cfg.presence.status)
+        };
+
+        // Build the details line from config templates.
+        let details: String = match hero_name {
+            Some(name) => config::apply_vars(&cfg.presence.details_with_hero, &[("hero", name)]),
+            None => config::apply_vars(
+                &cfg.presence.details_no_hero,
+                &[("phase", phase.description())],
+            ),
         };
 
         log!(
@@ -172,7 +205,14 @@ fn main() {
             status
         );
 
-        let act = build_activity(phase, hero_data, &status, start_time);
+        let act = build_activity(
+            &details,
+            effective_hero_data,
+            &status,
+            start_time,
+            &cfg.images,
+            cfg.presence.show_elapsed_timer,
+        );
 
         match client.set_activity(act) {
             Ok(_) => {
@@ -184,6 +224,6 @@ fn main() {
             }
         }
 
-        thread::sleep(Duration::from_secs(5));
+        thread::sleep(update_interval);
     }
 }
