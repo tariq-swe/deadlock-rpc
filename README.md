@@ -98,6 +98,19 @@ Once set, you can launch Deadlock normally and then run Deadlock RPC with the `-
 
 ---
 
+## Windows Defender Warning
+
+When running `deadlock-rpc.exe` for the first time, Windows may display a SmartScreen warning saying **"Windows protected your PC"**. This happens because the executable is not signed with a paid code-signing certificate — not because it contains malware.
+
+To proceed:
+
+1. Click **More info** in the warning dialog
+2. Click **Run anyway**
+
+If you prefer to verify the binary yourself, you can [build from source](#building-from-source) instead.
+
+---
+
 ## Building from Source
 
 Requires [Rust](https://rustup.rs) stable.
