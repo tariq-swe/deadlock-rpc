@@ -7,6 +7,7 @@ mod logger;
 mod log_watcher;
 mod steam;
 mod tray;
+mod updater;
 
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use game_state::{GamePhase, GameState, MatchMode};
@@ -166,10 +167,15 @@ fn main() {
 
     let no_launch = args.iter().any(|a| a == "--no-launch");
 
+    logger::init();
+
+    // Check for updates before acquiring the instance lock.
+    // If an update is applied: on Linux exec() replaces this process in-place;
+    // on Windows we exit before the port is ever bound — so no lock conflicts.
+    updater::check_on_startup();
+
     // Ensure only one instance runs at a time.
     let _instance_lock = acquire_single_instance_lock();
-
-    logger::init();
 
     // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
     #[cfg(not(debug_assertions))]
