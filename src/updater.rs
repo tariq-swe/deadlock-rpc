@@ -91,25 +91,42 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Ask the user before downloading anything.
-    let mut should_update = false;
-    let handle = notify_rust::Notification::new()
-        .appname("Deadlock RPC")
-        .summary("Update Available")
-        .body(&format!(
-            "v{} is available (you have v{CURRENT_VERSION}).\nDownload and install now?",
-            release.tag_name.trim_start_matches('v')
-        ))
-        .action("update", "Update Now")
-        .action("skip", "Skip")
-        .show()?;
+    // On Linux (D-Bus) we can show interactive actions; on Windows toast
+    // notifications don't support `wait_for_action`, so we just proceed.
+    #[cfg(unix)]
+    {
+        let mut should_update = false;
+        let handle = notify_rust::Notification::new()
+            .appname("Deadlock RPC")
+            .summary("Update Available")
+            .body(&format!(
+                "v{} is available (you have v{CURRENT_VERSION}).\nDownload and install now?",
+                release.tag_name.trim_start_matches('v')
+            ))
+            .action("update", "Update Now")
+            .action("skip", "Skip")
+            .show()?;
 
-    handle.wait_for_action(|action| {
-        should_update = action == "update";
-    });
+        handle.wait_for_action(|action| {
+            should_update = action == "update";
+        });
 
-    if !should_update {
-        log!("[updater] User skipped update");
-        return Ok(());
+        if !should_update {
+            log!("[updater] User skipped update");
+            return Ok(());
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        notify_rust::Notification::new()
+            .appname("Deadlock RPC")
+            .summary("Update Available")
+            .body(&format!(
+                "v{} is available (you have v{CURRENT_VERSION}). Installing now...",
+                release.tag_name.trim_start_matches('v')
+            ))
+            .show()?;
     }
 
     let asset = release
