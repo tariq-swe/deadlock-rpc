@@ -2,7 +2,7 @@
 
 Discord Rich Presence for Deadlock — automatically shows your current hero, game state, and match mode on your Discord profile in real time.
 
-> **Not affiliated with Valve Corporation or the Deadlock development team.** This is an independent, open-source project.
+> **Not affiliated with Valve Corporation or the Deadlock development team.**
 
 ---
 
@@ -16,11 +16,13 @@ Discord Rich Presence for Deadlock — automatically shows your current hero, ga
 
 - **Hero display** — shows your current hero's name and card image
 - **Game state tracking** — Hideout, In Queue, Match Intro, In Match, Post Match, Spectating
-- **Match mode detection** — Standard Match, Street Brawl, Bot Match, Training Range, and more
+- **Match mode detection** — Standard, Street Brawl, Bot Match, Training Range, and more
 - **Hero-specific hideout messages** — unique status text per hero while in the Hideout
 - **Live elapsed timer** — tracks how long you have been in-session
+- **System tray icon** — runs quietly in the system tray with a Quit option on both Windows and Linux
+- **Auto-updater** — checks for new releases on startup and prompts you to install them
 - **Auto-launch** — launches Deadlock with the required flag automatically
-- **Self-installing** — creates a desktop shortcut on first run, no extra steps needed
+- **Self-installing** — creates a desktop shortcut on first run
 - **Auto-exit** — closes itself when you close Deadlock
 - **Fully customizable** — presence text, timer, hero display, poll rate, and more via `config.toml`
 
@@ -28,46 +30,25 @@ Discord Rich Presence for Deadlock — automatically shows your current hero, ga
 
 ## How It Works
 
-Deadlock can write its internal console output to a log file when launched with the `-condebug` flag. Deadlock RPC monitors this file in real time, parsing log lines with regex patterns to detect:
+Deadlock RPC launches the game with the `-condebug` flag, which causes Deadlock to write its internal console output to a log file. The app monitors this file in real time, parsing log lines to detect hero selection, map loads, phase transitions, and match mode. State changes are pushed to Discord via its IPC protocol.
 
-- Hero selection and changes
-- Map loads and game phase transitions
-- Match mode (player count, bot presence, map name)
-- Game shutdown and session end
-
-When state changes are detected, the Discord presence is updated via Discord's IPC protocol. No game memory is read, no files are modified, and no network traffic is intercepted — the app is entirely read-only with respect to the game.
-
----
-
-## Efficiency & FPS Impact
-
-Deadlock RPC is built in **Rust**, chosen specifically for its minimal runtime overhead and zero garbage collection pauses. The application:
-
-- Reads only the **tail of the log file** — it does not load the entire file into memory
-- Polls for changes every **500ms** by default (configurable) using standard file I/O, not filesystem watchers
-- Updates Discord presence only when **state actually changes** — no redundant IPC calls
-- Runs entirely in the **background** with negligible CPU and memory usage
-- Has **no impact on game performance or FPS** — it operates independently of the game process
+No game memory is read, no files are modified, and no network traffic is intercepted — the app is entirely read-only with respect to the game.
 
 ---
 
 ## Installation
 
-### Requirements
-
-- **Discord** must be running
-
-### Steps
+**Requirements:** Discord must be running.
 
 1. Go to the [Releases](../../releases) page
 2. Download and extract the zip for your platform:
    - **Windows:** `deadlock-rpc-setup-windows-x86_64.zip`
    - **Linux:** `deadlock-rpc-setup-linux-x86_64.zip`
-3. Run the binary inside the extracted folder once:
+3. Run the binary inside the extracted folder:
    - **Windows:** double-click `deadlock-rpc.exe`
    - **Linux:** `chmod +x deadlock-rpc && ./deadlock-rpc`
 4. A desktop shortcut named **Deadlock RPC** is created automatically
-5. Deadlock launches immediately with Rich Presence active
+5. Deadlock launches with Rich Presence active
 
 From this point forward, use the **Deadlock RPC** shortcut instead of launching Deadlock directly.
 
@@ -77,38 +58,49 @@ From this point forward, use the **Deadlock RPC** shortcut instead of launching 
 
 | Flag | Description |
 |------|-------------|
-| `--no-launch` | Start the RPC monitor without launching Deadlock |
+| `--no-launch` | Start the monitor without launching Deadlock |
+
+### Windows SmartScreen
+
+Windows may show a **"Windows protected your PC"** warning on first run. This is because the executable is unsigned, not because it contains malware. Click **More info → Run anyway** to proceed, or [build from source](#building-from-source) to verify the binary yourself.
 
 ---
 
-## ✦ Customization
+## Auto-updater
 
-On first run, Deadlock RPC creates a **`config.toml`** file in the same folder as the executable. Every option is documented inside it. Edit it with any text editor — changes take effect on the next launch.
+On startup, Deadlock RPC checks GitHub for a newer release.
 
-> **Tip:** You don't need to include every option. Any key you leave out or delete falls back to its default automatically.
+- **Linux** — a notification appears with **Update Now / Skip** action buttons
+- **Windows** — a dialog box appears with **Yes / No** options
 
-### Behavior
+If you accept, the update is downloaded, applied, and the app restarts automatically.
+
+---
+
+## Customization
+
+On first run a **`config.toml`** is created next to the executable with all options documented. Edit it with any text editor — changes take effect on the next launch. Any key you omit falls back to its default.
+
+### General
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `general.auto_launch` | `true` | Launch Deadlock automatically on startup. Set `false` to behave like `--no-launch` every time. |
-| `general.auto_exit` | `true` | Exit when the game closes. Set `false` to keep the process running. |
-| `general.launch_timeout_s` | `120` | Seconds to wait for the game to appear before giving up. |
-| `general.log_poll_interval_ms` | `500` | How often (ms) to check the game log for new events. Lower = faster updates. |
+| `general.auto_launch` | `true` | Launch Deadlock on startup. |
+| `general.auto_exit` | `true` | Exit when the game closes. |
+| `general.launch_timeout_s` | `120` | Seconds to wait for the game to appear after launch. |
+| `general.log_poll_interval_ms` | `500` | How often (ms) to check the game log. Lower = faster updates. |
 | `general.presence_update_interval_s` | `5` | How often (seconds) to refresh the Discord presence card. |
 
-### Presence display
+### Presence
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `presence.show_elapsed_timer` | `true` | Show or hide the elapsed time counter. |
-| `presence.show_hero` | `true` | Show the hero image and name. Set `false` to always display the Deadlock logo. |
-| `presence.details_with_hero` | `"Playing as {hero}"` | Top line of the presence card when a hero is known. |
-| `presence.details_no_hero` | `"{phase}"` | Top line when no hero is known (menus, post-match, etc.). |
+| `presence.show_elapsed_timer` | `true` | Show the elapsed time counter. |
+| `presence.show_hero` | `true` | Show the hero image and name. |
+| `presence.details_with_hero` | `"Playing as {hero}"` | Top line when a hero is known. |
+| `presence.details_no_hero` | `"{phase}"` | Top line when no hero is known. |
 
 ### Per-phase status strings
-
-These control the bottom line of the presence card. Edit any or all of them:
 
 | Key | Default |
 |-----|---------|
@@ -126,83 +118,44 @@ These control the bottom line of the presence card. Edit any or all of them:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `images.default_large_image` | `"deadlock_logo"` | Large image asset key when no hero image is shown. |
-| `images.default_large_text` | `"Deadlock"` | Tooltip for the large image when no hero is shown. |
-| `images.small_image` | `"deadlock_logo"` | Small corner overlay image asset key. |
-| `images.small_text` | `"Deadlock"` | Tooltip for the small corner image. |
+| `images.default_large_image` | `"deadlock_logo"` | Large image asset when no hero is shown. |
+| `images.default_large_text` | `"Deadlock"` | Tooltip for the large image. |
+| `images.small_image` | `"deadlock_logo"` | Small corner overlay image asset. |
+| `images.small_text` | `"Deadlock"` | Tooltip for the small image. |
 
 ### Template variables
-
-Some strings support `{variable}` placeholders that are filled in at runtime:
 
 | Variable | Available in | Value |
 |----------|-------------|-------|
 | `{hero}` | `details_with_hero`, `in_hideout` | Hero display name, e.g. `Vindicta` |
-| `{phase}` | `details_no_hero` | Current phase label, e.g. `Post Match` |
+| `{phase}` | `details_no_hero` | Phase label, e.g. `Post Match` |
 | `{mode}` | `match_intro`, `in_match` | Match mode, e.g. `Standard Match` |
 | `{location}` | `in_match` | Value of `in_match_location` |
 
 ### Examples
 
-**Minimal presence — no hero name, no timer:**
 ```toml
+# Minimal presence — no hero name, no timer
 [presence]
 show_elapsed_timer = false
 details_with_hero  = "Playing Deadlock"
 details_no_hero    = "Playing Deadlock"
-```
 
-**Custom in-match status:**
-```toml
+# Custom in-match status
 [presence.status]
-in_match          = "Grinding {mode}"
-in_match_location = "the streets"   # unused if you remove {location} from in_match
-in_queue          = "Waiting for a game..."
-```
+in_match = "Grinding {mode}"
+in_queue = "Waiting for a game..."
 
-**Slower polling for even lower overhead:**
-```toml
-[general]
-log_poll_interval_ms       = 1000
-presence_update_interval_s = 10
-```
-
-**Keep the app open after the game closes (useful if you restart often):**
-```toml
+# Keep the app open after the game closes
 [general]
 auto_exit = false
 ```
 
 ---
 
-## Manual Launch Option (`-condebug`)
+## Manual `-condebug` setup
 
-Deadlock RPC automatically launches Deadlock with the required `-condebug` flag. If you prefer to manage Deadlock's launch options yourself — for example, if you launch through a different shortcut — you can set the flag directly in Steam:
-
-1. Open **Steam** and go to your **Library**
-2. Right-click **Deadlock** and select **Properties**
-3. Under the **General** tab, find the **Launch Options** field
-4. Enter `-condebug` (you can combine it with any existing options, e.g. `-condebug -novid`)
-5. Close the Properties window
-
-Once set, you can launch Deadlock normally and then run Deadlock RPC with the `--no-launch` flag to skip the automatic launch:
-
-```
-./deadlock-rpc --no-launch
-```
-
----
-
-## Windows Defender Warning
-
-When running `deadlock-rpc.exe` for the first time, Windows may display a SmartScreen warning saying **"Windows protected your PC"**. This happens because the executable is not signed with a paid code-signing certificate — not because it contains malware.
-
-To proceed:
-
-1. Click **More info** in the warning dialog
-2. Click **Run anyway**
-
-If you prefer to verify the binary yourself, you can [build from source](#building-from-source) instead.
+If you prefer to manage Deadlock's launch options yourself, add `-condebug` to Steam's launch options for Deadlock (**Library → right-click Deadlock → Properties → General → Launch Options**), then run Deadlock RPC with `--no-launch`.
 
 ---
 
@@ -221,24 +174,10 @@ cargo build --release
 
 ## Contributing
 
-Contributions are welcome. Please follow these guidelines:
-
-- **Open an issue first** for non-trivial changes to align on approach before writing code
-- **Keep PRs focused** — one feature or fix per pull request
-- **No breaking changes** to existing CLI flags without discussion
-- **Test manually** against a running Deadlock session where possible
-- Code is formatted with `cargo fmt` and linted with `cargo clippy`
-
-Bug reports with the contents of `logs/deadlock-rpc.log` are especially helpful for diagnosing state detection issues.
+Contributions are welcome. Open an issue first for non-trivial changes. Keep PRs focused — one feature or fix each. Format with `cargo fmt`, lint with `cargo clippy`. Bug reports with the contents of `logs/deadlock-rpc.log` are especially helpful.
 
 ---
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by, or connected to Valve Corporation or the Deadlock development team in any way.
-
-**Deadlock**, the Deadlock logo, all hero names, hero images, and all related in-game assets are the property of **Valve Corporation**. All rights reserved.
-
-Hero images and game data displayed in the Discord presence are sourced from the community-maintained [Deadlock API](https://deadlock-api.com) and are the intellectual property of Valve Corporation. They are used here solely for non-commercial, informational display within Discord Rich Presence and remain the property of their respective owners.
-
-This project does not distribute, modify, or claim ownership of any Valve assets. If you are a rights holder and have concerns, please open an issue and they will be addressed promptly.
+Not affiliated with, endorsed by, or connected to Valve Corporation. **Deadlock**, all hero names, images, and related assets are the property of **Valve Corporation**. Hero images displayed in Discord are sourced from the community-maintained [Deadlock API](https://deadlock-api.com) and remain the property of Valve. This project does not distribute or claim ownership of any Valve assets.
