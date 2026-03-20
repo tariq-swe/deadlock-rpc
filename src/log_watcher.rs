@@ -69,13 +69,16 @@ pub struct LogWatcher {
     log_path: PathBuf,
     /// Captured at construction; used to detect logs left over from a prior session.
     app_start: std::time::SystemTime,
+    /// Milliseconds between log file polls (from config).
+    poll_interval_ms: u64,
 }
 
 impl LogWatcher {
-    pub fn new(log_path: PathBuf) -> Self {
+    pub fn new(log_path: PathBuf, poll_interval_ms: u64) -> Self {
         Self {
             log_path,
             app_start: std::time::SystemTime::now(),
+            poll_interval_ms,
         }
     }
 
@@ -188,7 +191,7 @@ impl LogWatcher {
                 }
             }
 
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_millis(self.poll_interval_ms));
         }
     }
 }

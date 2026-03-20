@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::log;
 use std::time::{Duration, Instant};
 

@@ -146,27 +146,44 @@ impl GameState {
     }
 
     /// Returns the Discord presence status line for the current phase.
-    /// `hideout_text` is the hero-specific hideout message from the API (used in Hideout phase).
-    pub fn presence_status(&self, hideout_text: Option<&str>) -> String {
+    ///
+    /// - `hideout_text`: hero-specific text from the API (takes priority in Hideout phase).
+    /// - `hero_name`: display name of the current hero (used as `{hero}` variable).
+    /// - `cfg`: per-phase string templates from the loaded config.
+    pub fn presence_status(
+        &self,
+        hideout_text: Option<&str>,
+        hero_name: Option<&str>,
+        cfg: &crate::config::StatusStrings,
+    ) -> String {
+        use crate::config::apply_vars;
         match self.phase {
-            GamePhase::NotRunning => "Not Running".to_string(),
-            GamePhase::MainMenu => "Browsing the Main Menu".to_string(),
-            GamePhase::Hideout => hideout_text
-                .filter(|t| !t.is_empty())
-                .unwrap_or("In the Hideout")
-                .to_string(),
-            GamePhase::InQueue => "Searching for a Match...".to_string(),
-            GamePhase::MatchIntro => format!("{} • Loading into Match", self.match_mode.display()),
+            GamePhase::NotRunning => cfg.not_running.clone(),
+            GamePhase::MainMenu => cfg.main_menu.clone(),
+            GamePhase::Hideout => {
+                if let Some(text) = hideout_text.filter(|t| !t.is_empty()) {
+                    text.to_string()
+                } else {
+                    apply_vars(&cfg.in_hideout, &[("hero", hero_name.unwrap_or(""))])
+                }
+            }
+            GamePhase::InQueue => cfg.in_queue.clone(),
+            GamePhase::MatchIntro => {
+                apply_vars(&cfg.match_intro, &[("mode", self.match_mode.display())])
+            }
             GamePhase::InMatch => {
                 let mode = self.match_mode.display();
                 if self.match_mode.show_map_location() {
-                    format!("{mode} • Battling in the Cursed Apple")
+                    apply_vars(
+                        &cfg.in_match,
+                        &[("mode", mode), ("location", &cfg.in_match_location)],
+                    )
                 } else {
                     mode.to_string()
                 }
             }
-            GamePhase::PostMatch => "Reviewing Match Results".to_string(),
-            GamePhase::Spectating => "Watching a Match".to_string(),
+            GamePhase::PostMatch => cfg.post_match.clone(),
+            GamePhase::Spectating => cfg.spectating.clone(),
         }
     }
 
