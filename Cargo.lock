@@ -519,6 +519,7 @@ dependencies = [
  "serde",
  "toml",
  "tray-icon",
+ "winapi",
  "winreg",
  "zip",
 ]
