@@ -7,6 +7,8 @@ mod launcher;
 mod logger;
 mod log_watcher;
 mod steam;
+mod tray;
+mod updater;
 
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use game_state::{GamePhase, GameState, MatchMode};
@@ -122,6 +124,7 @@ fn main() {
         thread::spawn(move || LogWatcher::new(log_path, poll_ms).run(state));
     }
 
+fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool) {
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
@@ -226,4 +229,47 @@ fn main() {
 
         thread::sleep(update_interval);
     }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    let no_launch = args.iter().any(|a| a == "--no-launch");
+
+    logger::init();
+
+    // Check for updates before acquiring the instance lock.
+    // If an update is applied: on Linux exec() replaces this process in-place;
+    // on Windows we exit before the port is ever bound — so no lock conflicts.
+    updater::check_on_startup();
+
+    // Ensure only one instance runs at a time.
+    let _instance_lock = acquire_single_instance_lock();
+
+    // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
+    #[cfg(not(debug_assertions))]
+    launcher::install_shortcut();
+
+    if !no_launch {
+        launcher::launch_deadlock();
+    }
+
+    let log_path = steam::find_console_log();
+    log!("[deadlock-rpc] Monitoring: {}", log_path.display());
+
+    let state = Arc::new(Mutex::new(GameState::new()));
+
+    {
+        let state = Arc::clone(&state);
+        thread::spawn(move || LogWatcher::new(log_path).run(state));
+    }
+
+    {
+        let state = Arc::clone(&state);
+        thread::spawn(move || run_rpc_loop(state, no_launch));
+    }
+
+    // Block the main thread on the tray icon for the lifetime of the process.
+    // The only exit is the user clicking Quit, which calls process::exit.
+    tray::run();
 }

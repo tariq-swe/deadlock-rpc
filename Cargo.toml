@@ -1,11 +1,15 @@
 [package]
 name = "deadlock-rpc"
-version = "0.1.0"
+version = "0.1.3"
 edition = "2021"
 description = "Discord Rich Presence for the Valve game Deadlock"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+tray-icon = "0.17"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = "0.2"
 
 [dependencies]
 discord-rich-presence = "1.1"
@@ -14,3 +18,6 @@ dirs = "5"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 toml = { version = "0.8", features = ["parse"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+notify-rust = "4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
