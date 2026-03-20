@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub general: GeneralConfig,
@@ -72,16 +72,6 @@ pub struct ImagesConfig {
     pub small_image: String,
     /// Hover text for the small corner image.
     pub small_text: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            presence: PresenceConfig::default(),
-            images: ImagesConfig::default(),
-        }
-    }
 }
 
 impl Default for GeneralConfig {
