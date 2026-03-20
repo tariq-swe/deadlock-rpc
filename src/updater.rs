@@ -119,14 +119,10 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(windows)]
     {
-        notify_rust::Notification::new()
-            .appname("Deadlock RPC")
-            .summary("Update Available")
-            .body(&format!(
-                "v{} is available (you have v{CURRENT_VERSION}). Installing now...",
-                release.tag_name.trim_start_matches('v')
-            ))
-            .show()?;
+        if !prompt_update_windows(release.tag_name.trim_start_matches('v')) {
+            log!("[updater] User skipped update");
+            return Ok(());
+        }
     }
 
     let asset = release
@@ -150,6 +146,35 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
     // notify the user and exec/restart, so this fires only on full success.
     apply_update(&exe_path, &new_binary)?;
     Ok(())
+}
+
+// ── Platform-specific prompt ──────────────────────────────────────────────────
+
+/// Shows a Yes/No message box via PowerShell WPF. Returns true if the user
+/// chose to update. Falls back to true (auto-update) if the dialog fails.
+#[cfg(windows)]
+fn prompt_update_windows(new_version: &str) -> bool {
+    let message = format!(
+        "v{new_version} is available (you have v{CURRENT_VERSION}).\nDownload and install now?"
+    );
+    // Escape single quotes for PowerShell string literal.
+    let escaped = message.replace('\'', "''");
+    let script = format!(
+        "Add-Type -AssemblyName PresentationFramework; \
+         [System.Windows.MessageBox]::Show('{escaped}', 'Deadlock RPC Update', 'YesNo', 'Question')"
+    );
+    std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &script,
+        ])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Yes")
+        .unwrap_or(true) // if the dialog itself fails, don't silently skip updates
 }
 
 // ── Platform-specific apply ───────────────────────────────────────────────────
