@@ -90,41 +90,7 @@ fn exit_discord(client: &mut DiscordIpcClient) {
     let _ = client.close();
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
-    // Ensure only one instance runs at a time.
-    let _instance_lock = acquire_single_instance_lock();
-
-    logger::init();
-
-    let cfg = config::load();
-    log!("[config] Loaded from config.toml");
-
-    // --no-launch CLI flag always overrides auto_launch, even if config enables it.
-    let no_launch = args.iter().any(|a| a == "--no-launch") || !cfg.general.auto_launch;
-
-    // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
-    #[cfg(not(debug_assertions))]
-    launcher::install_shortcut();
-
-    if !no_launch {
-        launcher::launch_deadlock();
-    }
-
-    let log_path = steam::find_console_log();
-    log!("[deadlock-rpc] Monitoring: {}", log_path.display());
-
-    let state = Arc::new(Mutex::new(GameState::new()));
-
-    {
-        let state = Arc::clone(&state);
-        let log_path = log_path.clone();
-        let poll_ms = cfg.general.log_poll_interval_ms;
-        thread::spawn(move || LogWatcher::new(log_path, poll_ms).run(state));
-    }
-
-fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool) {
+fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Config) {
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
@@ -133,10 +99,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool) {
 
     // If we launched the game, give it up to `launch_timeout_s` to appear before giving up.
     let launch_deadline = if !no_launch {
-        Some(
-            std::time::Instant::now()
-                + Duration::from_secs(cfg.general.launch_timeout_s),
-        )
+        Some(std::time::Instant::now() + Duration::from_secs(cfg.general.launch_timeout_s))
     } else {
         None
     };
@@ -155,7 +118,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool) {
             log!("[deadlock-rpc] Game closed.");
             if cfg.general.auto_exit {
                 exit_discord(&mut client);
-                std::process::exit(0);
+std::process::exit(0);
             }
         } else if let Some(deadline) = launch_deadline {
             if std::time::Instant::now() > deadline {
@@ -175,11 +138,12 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool) {
         }
 
         // Respect show_hero: if disabled, never pass hero data for display.
-        let effective_hero_data: Option<&HeroData> = if cfg.presence.show_hero && phase.shows_hero() {
-            hero_key.as_deref().and_then(|k| hero_cache.get_or_fetch(k))
-        } else {
-            None
-        };
+        let effective_hero_data: Option<&HeroData> =
+            if cfg.presence.show_hero && phase.shows_hero() {
+                hero_key.as_deref().and_then(|k| hero_cache.get_or_fetch(k))
+            } else {
+                None
+            };
 
         // Clone the name so we can drop the hero_cache borrow before locking state.
         let hero_name_owned: Option<String> = effective_hero_data.map(|d| d.name.clone());
@@ -234,10 +198,6 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool) {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    let no_launch = args.iter().any(|a| a == "--no-launch");
-
-    logger::init();
-
     // Check for updates before acquiring the instance lock.
     // If an update is applied: on Linux exec() replaces this process in-place;
     // on Windows we exit before the port is ever bound — so no lock conflicts.
@@ -245,6 +205,14 @@ fn main() {
 
     // Ensure only one instance runs at a time.
     let _instance_lock = acquire_single_instance_lock();
+
+    logger::init();
+
+    let cfg = config::load();
+    log!("[config] Loaded from config.toml");
+
+    // --no-launch CLI flag always overrides auto_launch, even if config enables it.
+    let no_launch = args.iter().any(|a| a == "--no-launch") || !cfg.general.auto_launch;
 
     // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
     #[cfg(not(debug_assertions))]
@@ -261,12 +229,13 @@ fn main() {
 
     {
         let state = Arc::clone(&state);
-        thread::spawn(move || LogWatcher::new(log_path).run(state));
+        let poll_ms = cfg.general.log_poll_interval_ms;
+        thread::spawn(move || LogWatcher::new(log_path, poll_ms).run(state));
     }
 
     {
         let state = Arc::clone(&state);
-        thread::spawn(move || run_rpc_loop(state, no_launch));
+        thread::spawn(move || run_rpc_loop(state, no_launch, cfg));
     }
 
     // Block the main thread on the tray icon for the lifetime of the process.
