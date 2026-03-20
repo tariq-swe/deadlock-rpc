@@ -5,6 +5,7 @@ mod hero_api;
 mod launcher;
 mod logger;
 mod log_watcher;
+mod process_guard;
 mod steam;
 mod tray;
 mod updater;
@@ -112,6 +113,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool) {
         } else if game_was_running {
             log!("[deadlock-rpc] Game closed, exiting.");
             exit_discord(&mut client);
+            process_guard::wait_and_kill_if_needed();
             std::process::exit(0);
         } else if let Some(deadline) = launch_deadline {
             if std::time::Instant::now() > deadline {
