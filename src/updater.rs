@@ -55,6 +55,7 @@ fn extract_binary(zip_bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error
     Ok(out)
 }
 
+#[cfg(not(windows))]
 fn notify(body: &str) {
     let _ = notify_rust::Notification::new()
         .appname("Deadlock RPC")
@@ -62,6 +63,9 @@ fn notify(body: &str) {
         .body(body)
         .show();
 }
+
+#[cfg(windows)]
+fn notify(_body: &str) {}
 
 /// Called at startup before anything else. If a newer release exists the user
 /// is prompted. If they accept, the update is downloaded, applied, and the
@@ -150,31 +154,35 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
 
 // ── Platform-specific prompt ──────────────────────────────────────────────────
 
-/// Shows a Yes/No message box via PowerShell WPF. Returns true if the user
-/// chose to update. Falls back to true (auto-update) if the dialog fails.
+/// Shows a Yes/No message box via the Windows API directly.
 #[cfg(windows)]
 fn prompt_update_windows(new_version: &str) -> bool {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use winapi::um::winuser::{MessageBoxW, IDYES, MB_ICONQUESTION, MB_YESNO};
+
     let message = format!(
-        "v{new_version} is available (you have v{CURRENT_VERSION}).\nDownload and install now?"
+        "v{new_version} is available (you have v{CURRENT_VERSION}).\r\nDownload and install now?"
     );
-    // Escape single quotes for PowerShell string literal.
-    let escaped = message.replace('\'', "''");
-    let script = format!(
-        "Add-Type -AssemblyName PresentationFramework; \
-         [System.Windows.MessageBox]::Show('{escaped}', 'Deadlock RPC Update', 'YesNo', 'Question')"
-    );
-    std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-WindowStyle",
-            "Hidden",
-            "-Command",
-            &script,
-        ])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "Yes")
-        .unwrap_or(true) // if the dialog itself fails, don't silently skip updates
+    let message_wide: Vec<u16> = OsStr::new(&message)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let caption_wide: Vec<u16> = OsStr::new("Deadlock RPC Update")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let result = unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            message_wide.as_ptr(),
+            caption_wide.as_ptr(),
+            MB_YESNO | MB_ICONQUESTION,
+        )
+    };
+
+    result == IDYES
 }
 
 // ── Platform-specific apply ───────────────────────────────────────────────────

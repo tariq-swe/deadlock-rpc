@@ -136,11 +136,8 @@ mod windows {
         use tray_icon::menu::{Menu, MenuEvent, MenuItem};
 
         let menu = Menu::new();
-        let update_item = MenuItem::new("Check for Updates", true, None);
         let quit_item = MenuItem::new("Quit", true, None);
-        let update_id = update_item.id().clone();
         let quit_id = quit_item.id().clone();
-        menu.append(&update_item).unwrap();
         menu.append(&quit_item).unwrap();
 
         let _tray = TrayIconBuilder::new()
@@ -164,8 +161,6 @@ mod windows {
                 while let Ok(event) = MenuEvent::receiver().try_recv() {
                     if event.id == quit_id {
                         std::process::exit(0);
-                    } else if event.id == update_id {
-                        thread::spawn(|| crate::updater::check_on_startup());
                     }
                 }
                 thread::sleep(Duration::from_millis(50));
