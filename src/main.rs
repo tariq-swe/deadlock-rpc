@@ -6,6 +6,7 @@ mod hero_api;
 mod launcher;
 mod logger;
 mod log_watcher;
+mod process_guard;
 mod steam;
 mod tray;
 mod updater;
