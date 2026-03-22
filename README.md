@@ -1,6 +1,17 @@
-# Deadlock RPC
+<div align="center">
+  <img src="assets/icon.png" alt="Deadlock RPC" width="120" />
 
-Discord Rich Presence for Deadlock — automatically shows your current hero, game state, and match mode on your Discord profile in real time.
+  # Deadlock RPC
+
+  Discord Rich Presence for Deadlock — automatically shows your current hero, game state, and match mode on your Discord profile in real time.
+
+  [![Latest Release](https://img.shields.io/github/v/release/tariq-swe/deadlock-rpc?style=flat-square&label=release)](https://github.com/tariq-swe/deadlock-rpc/releases/latest)
+  [![Downloads](https://img.shields.io/github/downloads/tariq-swe/deadlock-rpc/total?style=flat-square)](https://github.com/tariq-swe/deadlock-rpc/releases)
+  [![License](https://img.shields.io/github/license/tariq-swe/deadlock-rpc?style=flat-square)](LICENSE)
+  [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=flat-square&logo=rust)](https://www.rust-lang.org)
+  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?style=flat-square)](https://github.com/tariq-swe/deadlock-rpc/releases/latest)
+
+</div>
 
 > **Not affiliated with Valve Corporation or the Deadlock development team.**
 
