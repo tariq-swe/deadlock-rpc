@@ -63,6 +63,8 @@ No game memory is read, no files are modified, and no network traffic is interce
 
 From this point forward, use the **Deadlock RPC** shortcut instead of launching Deadlock directly.
 
+*I personally like to add the Deadlock RPC executable as a non-steam game within the steam launcher and launch it that way. See [here](https://help.steampowered.com/en/faqs/view/4B8B-9697-2338-40EC) on how to do this.*
+
 > **Keep the extracted folder intact.** Logs are written to the `logs/` folder inside it.
 
 ### Flags
