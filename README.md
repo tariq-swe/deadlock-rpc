@@ -25,17 +25,15 @@
 
 ## Features
 
-- **Hero display** — shows your current hero's name and card image
+- **Hero display** — current hero name and card image
 - **Game state tracking** — Hideout, In Queue, Match Intro, In Match, Post Match, Spectating
 - **Match mode detection** — Standard, Street Brawl, Bot Match, Training Range, and more
-- **Hero-specific hideout messages** — unique status text per hero while in the Hideout
-- **Live elapsed timer** — tracks how long you have been in-session
-- **System tray icon** — runs quietly in the system tray with a Quit option on both Windows and Linux
+- **Live elapsed timer**
+- **System tray** — runs quietly in the background with a Quit option
 - **Auto-updater** — checks for new releases on startup and prompts you to install them
 - **Auto-launch** — launches Deadlock with the required flag automatically
-- **Self-installing** — creates a shortcut in the install folder on first run, ready to move to your desktop
 - **Auto-exit** — closes itself when you close Deadlock
-- **Fully customizable** — presence text, timer, hero display, poll rate, and more via `config.toml`
+- **Customizable** — presence text, timer, hero display, poll rate, and more via `config.toml`
 
 ---
 
@@ -58,20 +56,14 @@ No game memory is read, no files are modified, and no network traffic is interce
 3. Run the binary inside the extracted folder:
    - **Windows:** double-click `deadlock-rpc.exe`
    - **Linux:** `chmod +x deadlock-rpc && ./deadlock-rpc`
-4. A shortcut named **Deadlock RPC** is created in the extracted folder — move it to your desktop if you'd like
+4. A shortcut named **Deadlock RPC** is created in the extracted folder — move it to your desktop or wherever is convenient
 5. Deadlock launches with Rich Presence active
 
 From this point forward, use the **Deadlock RPC** shortcut instead of launching Deadlock directly.
 
-*I personally like to add the Deadlock RPC executable as a non-steam game within the steam launcher and launch it that way. See [here](https://help.steampowered.com/en/faqs/view/4B8B-9697-2338-40EC) on how to do this.*
+> **Recommended:** Add the Deadlock RPC executable as a non-Steam game in your Steam launcher so you can launch it directly from your library. See [Steam's guide](https://help.steampowered.com/en/faqs/view/4B8B-9697-2338-40EC) for instructions.
 
 > **Keep the extracted folder intact.** Logs are written to the `logs/` folder inside it.
-
-### Flags
-
-| Flag | Description |
-|------|-------------|
-| `--no-launch` | Start the monitor without launching Deadlock |
 
 ### Windows SmartScreen
 
@@ -79,18 +71,8 @@ Windows may show a **"Windows protected your PC"** warning on first run. This is
 
 ---
 
-## Auto-updater
-
-On startup, Deadlock RPC checks GitHub for a newer release.
-
-- **Linux** — a notification appears with **Update Now / Skip** action buttons
-- **Windows** — a dialog box appears with **Yes / No** options
-
-If you accept, the update is downloaded, applied, and the app restarts automatically.
-
----
-
-## Customization
+<details>
+<summary><strong>Customization</strong></summary>
 
 On first run a **`config.toml`** is created next to the executable with all options documented. Edit it with any text editor — changes take effect on the next launch. Any key you omit falls back to its default.
 
@@ -164,11 +146,7 @@ in_queue = "Waiting for a game..."
 auto_exit = false
 ```
 
----
-
-## Manual `-condebug` setup
-
-If you prefer to manage Deadlock's launch options yourself, add `-condebug` to Steam's launch options for Deadlock (**Library → right-click Deadlock → Properties → General → Launch Options**), then run Deadlock RPC with `--no-launch`.
+</details>
 
 ---
 
@@ -182,12 +160,6 @@ cd deadlock-rpc
 cargo build --release
 ./target/release/deadlock-rpc
 ```
-
----
-
-## Contributing
-
-Contributions are welcome. Open an issue first for non-trivial changes. Keep PRs focused — one feature or fix each. Format with `cargo fmt`, lint with `cargo clippy`. Bug reports with the contents of `logs/deadlock-rpc.log` are especially helpful.
 
 ---
 
