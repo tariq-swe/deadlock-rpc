@@ -33,7 +33,7 @@
 - **System tray icon** — runs quietly in the system tray with a Quit option on both Windows and Linux
 - **Auto-updater** — checks for new releases on startup and prompts you to install them
 - **Auto-launch** — launches Deadlock with the required flag automatically
-- **Self-installing** — creates a desktop shortcut on first run
+- **Self-installing** — creates a shortcut in the install folder on first run, ready to move to your desktop
 - **Auto-exit** — closes itself when you close Deadlock
 - **Fully customizable** — presence text, timer, hero display, poll rate, and more via `config.toml`
 
@@ -58,7 +58,7 @@ No game memory is read, no files are modified, and no network traffic is interce
 3. Run the binary inside the extracted folder:
    - **Windows:** double-click `deadlock-rpc.exe`
    - **Linux:** `chmod +x deadlock-rpc && ./deadlock-rpc`
-4. A desktop shortcut named **Deadlock RPC** is created automatically
+4. A shortcut named **Deadlock RPC** is created in the extracted folder — move it to your desktop if you'd like
 5. Deadlock launches with Rich Presence active
 
 From this point forward, use the **Deadlock RPC** shortcut instead of launching Deadlock directly.

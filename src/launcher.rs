@@ -58,11 +58,7 @@ fn icon_path(exe: &std::path::Path, filename: &str) -> Option<PathBuf> {
 
 #[cfg(all(unix, not(debug_assertions)))]
 fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let apps_dir = dirs::home_dir()
-        .ok_or("could not find home directory")?
-        .join(".local/share/applications");
-
-    std::fs::create_dir_all(&apps_dir)?;
+    let dir = exe.parent().ok_or("could not determine executable directory")?;
 
     let icon_line = icon_path(exe, "icon.png")
         .map(|p| format!("Icon={}\n", p.display()))
@@ -81,7 +77,7 @@ fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn s
         exe = exe.display()
     );
 
-    let dest = apps_dir.join("deadlock-rpc.desktop");
+    let dest = dir.join("deadlock-rpc.desktop");
     std::fs::write(&dest, desktop)?;
 
     // Make executable
@@ -93,8 +89,8 @@ fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn s
 
 #[cfg(all(windows, not(debug_assertions)))]
 fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let desktop = dirs::desktop_dir().ok_or("could not find Desktop directory")?;
-    let lnk = desktop.join("Deadlock RPC.lnk");
+    let dir = exe.parent().ok_or("could not determine executable directory")?;
+    let lnk = dir.join("Deadlock RPC.lnk");
 
     let icon_part = icon_path(exe, "icon.ico")
         .map(|p| format!("$s.IconLocation='{}';", p.display()))
