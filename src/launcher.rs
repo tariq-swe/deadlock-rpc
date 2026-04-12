@@ -44,10 +44,87 @@ pub fn install_shortcut() {
         }
     };
 
+    let path = match shortcut_path(&exe) {
+        Some(p) => p,
+        None => {
+            log!("[install] Could not determine shortcut path");
+            return;
+        }
+    };
+
+    if path.exists() {
+        log!("[install] Shortcut already exists, skipping");
+        return;
+    }
+
+    if !prompt_shortcut() {
+        log!("[install] User declined shortcut creation");
+        return;
+    }
+
     match install_platform_shortcut(&exe) {
         Ok(dest) => log!("[install] Shortcut created: {}", dest.display()),
         Err(e) => log!("[install] Failed to create shortcut: {e}"),
     }
+}
+
+#[cfg(all(unix, not(debug_assertions)))]
+fn shortcut_path(exe: &std::path::Path) -> Option<PathBuf> {
+    Some(exe.parent()?.join("deadlock-rpc.desktop"))
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+fn shortcut_path(exe: &std::path::Path) -> Option<PathBuf> {
+    Some(exe.parent()?.join("Deadlock RPC.lnk"))
+}
+
+#[cfg(all(unix, not(debug_assertions)))]
+fn prompt_shortcut() -> bool {
+    let mut accepted = false;
+    let Ok(handle) = notify_rust::Notification::new()
+        .appname("Deadlock RPC")
+        .summary("Create Shortcut?")
+        .body("Would you like to create a shortcut in the install folder?")
+        .action("yes", "Yes")
+        .action("no", "No")
+        .show()
+    else {
+        // If we can't show a notification, default to creating the shortcut.
+        return true;
+    };
+    handle.wait_for_action(|action| {
+        accepted = action == "yes";
+    });
+    accepted
+}
+
+#[cfg(all(windows, not(debug_assertions)))]
+fn prompt_shortcut() -> bool {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use winapi::um::winuser::{MessageBoxW, IDYES, MB_ICONQUESTION, MB_YESNO};
+
+    let message_wide: Vec<u16> = OsStr::new(
+        "Would you like to create a shortcut in the install folder?",
+    )
+    .encode_wide()
+    .chain(std::iter::once(0))
+    .collect();
+    let caption_wide: Vec<u16> = OsStr::new("Deadlock RPC")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let result = unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            message_wide.as_ptr(),
+            caption_wide.as_ptr(),
+            MB_YESNO | MB_ICONQUESTION,
+        )
+    };
+
+    result == IDYES
 }
 
 #[cfg(not(debug_assertions))]
@@ -58,11 +135,7 @@ fn icon_path(exe: &std::path::Path, filename: &str) -> Option<PathBuf> {
 
 #[cfg(all(unix, not(debug_assertions)))]
 fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let apps_dir = dirs::home_dir()
-        .ok_or("could not find home directory")?
-        .join(".local/share/applications");
-
-    std::fs::create_dir_all(&apps_dir)?;
+    let dir = exe.parent().ok_or("could not determine executable directory")?;
 
     let icon_line = icon_path(exe, "icon.png")
         .map(|p| format!("Icon={}\n", p.display()))
@@ -81,7 +154,7 @@ fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn s
         exe = exe.display()
     );
 
-    let dest = apps_dir.join("deadlock-rpc.desktop");
+    let dest = dir.join("deadlock-rpc.desktop");
     std::fs::write(&dest, desktop)?;
 
     // Make executable
@@ -93,8 +166,8 @@ fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn s
 
 #[cfg(all(windows, not(debug_assertions)))]
 fn install_platform_shortcut(exe: &std::path::Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let desktop = dirs::desktop_dir().ok_or("could not find Desktop directory")?;
-    let lnk = desktop.join("Deadlock RPC.lnk");
+    let dir = exe.parent().ok_or("could not determine executable directory")?;
+    let lnk = dir.join("Deadlock RPC.lnk");
 
     let icon_part = icon_path(exe, "icon.ico")
         .map(|p| format!("$s.IconLocation='{}';", p.display()))
