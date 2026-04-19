@@ -1,6 +1,6 @@
 [package]
 name = "deadlock-rpc"
-version = "0.1.5"
+version = "0.1.7"
 edition = "2021"
 description = "Discord Rich Presence for the Valve game Deadlock"
 
