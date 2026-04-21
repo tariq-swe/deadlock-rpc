@@ -376,12 +376,6 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.hideout_loaded = false;
         }
     } else if let Some(m) = p.player_info.captures(line) {
-        // Only act during active match phases. Hideout reports "/31 humans" and
-        // MainMenu reports "/1 humans" — neither should influence match mode.
-        // Use current connected count only to confirm Standard (≥9 is unambiguous);
-        // do NOT infer StreetBrawl from a low count — the line fires at connection
-        // time, before all players have loaded in, so a Standard match commonly
-        // shows 5-8 players here and would be mis-classified.
         if matches!(
             state.phase,
             GamePhase::MatchIntro | GamePhase::InMatch
