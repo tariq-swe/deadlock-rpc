@@ -376,18 +376,26 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.hideout_loaded = false;
         }
     } else if let Some(m) = p.player_info.captures(line) {
-        if state.phase != GamePhase::Spectating {
+        // Only act during active match phases. Hideout reports "/31 humans" and
+        // MainMenu reports "/1 humans" — neither should influence match mode.
+        // Use current connected count only to confirm Standard (≥9 is unambiguous);
+        // do NOT infer StreetBrawl from a low count — the line fires at connection
+        // time, before all players have loaded in, so a Standard match commonly
+        // shows 5-8 players here and would be mis-classified.
+        if matches!(
+            state.phase,
+            GamePhase::MatchIntro | GamePhase::InMatch
+        ) {
             let player_count: u32 = m.get(1).unwrap().as_str().parse::<u32>().unwrap_or(0);
-            if matches!(state.match_mode, MatchMode::Unknown | MatchMode::BotMatch) {
-                if player_count >= 9 {
-                    state.match_mode = MatchMode::Standard;
-                } else if player_count >= 5 {
-                    state.match_mode = MatchMode::StreetBrawl;
-                }
+            if matches!(state.match_mode, MatchMode::Unknown | MatchMode::BotMatch)
+                && player_count >= 9
+            {
+                state.match_mode = MatchMode::Standard;
             }
         }
     } else if p.bot_init.is_match(line)
-        && state.phase != GamePhase::Spectating
+        // Hideout spawns target-practice bots — don't let them poison match_mode.
+        && matches!(state.phase, GamePhase::MatchIntro | GamePhase::InMatch)
         && state.match_mode == MatchMode::Unknown
     {
         state.match_mode = MatchMode::BotMatch;
