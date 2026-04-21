@@ -95,38 +95,16 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Ask the user before downloading anything.
-    // On Linux (D-Bus) we can show interactive actions; on Windows toast
-    // notifications don't support `wait_for_action`, so we just proceed.
     #[cfg(unix)]
-    {
-        let mut should_update = false;
-        let handle = notify_rust::Notification::new()
-            .appname("Deadlock RPC")
-            .summary("Update Available")
-            .body(&format!(
-                "v{} is available (you have v{CURRENT_VERSION}).\nDownload and install now?",
-                release.tag_name.trim_start_matches('v')
-            ))
-            .action("update", "Update Now")
-            .action("skip", "Skip")
-            .show()?;
-
-        handle.wait_for_action(|action| {
-            should_update = action == "update";
-        });
-
-        if !should_update {
-            log!("[updater] User skipped update");
-            return Ok(());
-        }
+    if !prompt_update_linux(release.tag_name.trim_start_matches('v')) {
+        log!("[updater] User skipped update");
+        return Ok(());
     }
 
     #[cfg(windows)]
-    {
-        if !prompt_update_windows(release.tag_name.trim_start_matches('v')) {
-            log!("[updater] User skipped update");
-            return Ok(());
-        }
+    if !prompt_update_windows(release.tag_name.trim_start_matches('v')) {
+        log!("[updater] User skipped update");
+        return Ok(());
     }
 
     let asset = release
@@ -153,6 +131,45 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // ── Platform-specific prompt ──────────────────────────────────────────────────
+
+/// Blocking Yes/No dialog on Linux — tries zenity (GTK/GNOME) then kdialog (KDE).
+/// Returns true if the user chose to update.
+#[cfg(unix)]
+fn prompt_update_linux(new_version: &str) -> bool {
+    let text = format!(
+        "v{new_version} is available (you have v{CURRENT_VERSION}).\nDownload and install now?"
+    );
+
+    // zenity: exit 0 = OK pressed
+    let zenity = std::process::Command::new("zenity")
+        .args(["--question", "--title=Deadlock RPC Update"])
+        .arg(format!("--text={text}"))
+        .args(["--ok-label=Update Now", "--cancel-label=Skip"])
+        .status();
+
+    if let Ok(status) = zenity {
+        return status.success();
+    }
+
+    // kdialog: exit 0 = Yes pressed
+    std::process::Command::new("kdialog")
+        .args(["--title", "Deadlock RPC Update", "--yesno"])
+        .arg(&text)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Shows the update dialog with a fake version — for local dev testing only.
+#[cfg(unix)]
+pub fn show_update_prompt_dev() {
+    prompt_update_linux("99.0.0");
+}
+
+#[cfg(windows)]
+pub fn show_update_prompt_dev() {
+    prompt_update_windows("99.0.0");
+}
 
 /// Shows a Yes/No message box via the Windows API directly.
 #[cfg(windows)]
