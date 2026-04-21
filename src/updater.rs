@@ -95,38 +95,16 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Ask the user before downloading anything.
-    // On Linux (D-Bus) we can show interactive actions; on Windows toast
-    // notifications don't support `wait_for_action`, so we just proceed.
     #[cfg(unix)]
-    {
-        let mut should_update = false;
-        let handle = notify_rust::Notification::new()
-            .appname("Deadlock RPC")
-            .summary("Update Available")
-            .body(&format!(
-                "v{} is available (you have v{CURRENT_VERSION}).\nDownload and install now?",
-                release.tag_name.trim_start_matches('v')
-            ))
-            .action("update", "Update Now")
-            .action("skip", "Skip")
-            .show()?;
-
-        handle.wait_for_action(|action| {
-            should_update = action == "update";
-        });
-
-        if !should_update {
-            log!("[updater] User skipped update");
-            return Ok(());
-        }
+    if !prompt_update_linux(release.tag_name.trim_start_matches('v')) {
+        log!("[updater] User skipped update");
+        return Ok(());
     }
 
     #[cfg(windows)]
-    {
-        if !prompt_update_windows(release.tag_name.trim_start_matches('v')) {
-            log!("[updater] User skipped update");
-            return Ok(());
-        }
+    if !prompt_update_windows(release.tag_name.trim_start_matches('v')) {
+        log!("[updater] User skipped update");
+        return Ok(());
     }
 
     let asset = release
@@ -154,35 +132,116 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
 
 // ── Platform-specific prompt ──────────────────────────────────────────────────
 
-/// Shows a Yes/No message box via the Windows API directly.
+const CHANGELOG_URL: &str = "https://github.com/tariq-swe/deadlock-rpc/releases/latest";
+
+/// Blocking Yes/No dialog on Linux — tries zenity (GTK/GNOME) then kdialog (KDE).
+/// Loops if the user clicks "View Changelog" (opens browser, then re-shows the prompt).
+/// Returns true if the user chose to update.
+#[cfg(unix)]
+fn prompt_update_linux(new_version: &str) -> bool {
+    let text = format!(
+        "v{new_version} is available (you have v{CURRENT_VERSION}).\nDownload and install now?"
+    );
+
+    loop {
+        // ── zenity (GNOME/GTK) ────────────────────────────────────────────────
+        let zenity_out = std::process::Command::new("zenity")
+            .args(["--question", "--title=Deadlock RPC Update"])
+            .arg(format!("--text={text}"))
+            .args([
+                "--ok-label=Update Now",
+                "--cancel-label=Skip",
+                "--extra-button=View Changelog",
+            ])
+            .output();
+
+        if let Ok(out) = zenity_out {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if stdout.trim() == "View Changelog" {
+                let _ = std::process::Command::new("xdg-open").arg(CHANGELOG_URL).spawn();
+                continue;
+            }
+            return out.status.success();
+        }
+
+        // ── kdialog (KDE) — yesnocancel: 0=Yes 1=No 2=Cancel ────────────────
+        let kdialog_status = std::process::Command::new("kdialog")
+            .args([
+                "--title", "Deadlock RPC Update",
+                "--yesnocancel", &text,
+                "--yes-label", "Update Now",
+                "--no-label", "Skip",
+                "--cancel-label", "View Changelog",
+            ])
+            .status();
+
+        match kdialog_status.as_ref().ok().and_then(|s| s.code()) {
+            Some(0) => return true,
+            Some(1) => return false,
+            Some(2) => {
+                let _ = std::process::Command::new("xdg-open").arg(CHANGELOG_URL).spawn();
+                continue;
+            }
+            _ => return false,
+        }
+    }
+}
+
+/// Shows the update dialog with a fake version — for local dev testing only.
+#[cfg(unix)]
+#[allow(dead_code)]
+pub fn show_update_prompt_dev() {
+    prompt_update_linux("99.0.0");
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn show_update_prompt_dev() {
+    prompt_update_windows("99.0.0");
+}
+
+/// Shows a Yes/No/Cancel message box via the Windows API.
+/// Yes = Update Now, No = Skip, Cancel = View Changelog (opens browser, re-shows dialog).
 #[cfg(windows)]
 fn prompt_update_windows(new_version: &str) -> bool {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use winapi::um::winuser::{MessageBoxW, IDYES, MB_ICONQUESTION, MB_YESNO};
+    use winapi::um::winuser::{MessageBoxW, IDCANCEL, IDNO, IDYES, MB_ICONQUESTION, MB_YESNOCANCEL};
 
-    let message = format!(
-        "v{new_version} is available (you have v{CURRENT_VERSION}).\r\nDownload and install now?"
-    );
-    let message_wide: Vec<u16> = OsStr::new(&message)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    let caption_wide: Vec<u16> = OsStr::new("Deadlock RPC Update")
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-
-    let result = unsafe {
-        MessageBoxW(
-            std::ptr::null_mut(),
-            message_wide.as_ptr(),
-            caption_wide.as_ptr(),
-            MB_YESNO | MB_ICONQUESTION,
-        )
+    let to_wide = |s: &str| -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
     };
 
-    result == IDYES
+    let message = format!(
+        "v{new_version} is available (you have v{CURRENT_VERSION}).\r\n\r\n\
+        Yes \u{2014} Update Now\r\n\
+        No \u{2014} Skip\r\n\
+        Cancel \u{2014} View Changelog"
+    );
+    let caption = to_wide("Deadlock RPC Update");
+
+    loop {
+        let result = unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                to_wide(&message).as_ptr(),
+                caption.as_ptr(),
+                MB_YESNOCANCEL | MB_ICONQUESTION,
+            )
+        };
+
+        match result {
+            IDYES => return true,
+            IDNO => return false,
+            IDCANCEL => {
+                let _ = std::process::Command::new("cmd")
+                    .args(["/c", "start", "", CHANGELOG_URL])
+                    .spawn();
+                // re-show the dialog after the browser opens
+            }
+            _ => return false,
+        }
+    }
 }
 
 // ── Platform-specific apply ───────────────────────────────────────────────────
