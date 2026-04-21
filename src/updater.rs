@@ -187,19 +187,6 @@ fn prompt_update_linux(new_version: &str) -> bool {
     }
 }
 
-/// Shows the update dialog with a fake version — for local dev testing only.
-#[cfg(unix)]
-#[allow(dead_code)]
-pub fn show_update_prompt_dev() {
-    prompt_update_linux("99.0.0");
-}
-
-#[cfg(windows)]
-#[allow(dead_code)]
-pub fn show_update_prompt_dev() {
-    prompt_update_windows("99.0.0");
-}
-
 /// Shows a Yes/No/Cancel message box via the Windows API.
 /// Yes = Update Now, No = Skip, Cancel = View Changelog (opens browser, re-shows dialog).
 #[cfg(windows)]

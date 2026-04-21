@@ -69,9 +69,6 @@ pub struct GameState {
     pub hero_key: Option<String>,
     pub map_name: Option<String>,
     pub game_start_time: Option<i64>,
-    /// Counts log lines received after the initial resync.
-    /// Zero means the log is stale from a prior session — game is not actually running.
-    pub live_lines_seen: u64,
     // internal tracking
     pub(crate) hero_window_open: bool,
     pub(crate) hideout_loaded: bool,
@@ -85,7 +82,6 @@ impl GameState {
             hero_key: None,
             map_name: None,
             game_start_time: None,
-            live_lines_seen: 0,
             hero_window_open: true,
             hideout_loaded: false,
         }

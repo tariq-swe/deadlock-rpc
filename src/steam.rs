@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 const DEADLOCK_APP_ID: &str = "1422450";
 const CONSOLE_LOG_SUFFIX: &str = "game/citadel/console.log";
@@ -9,11 +10,15 @@ pub fn find_console_log() -> PathBuf {
     })
 }
 
+static VDF_PATTERNS: OnceLock<(regex::Regex, regex::Regex)> = OnceLock::new();
+
 fn try_find_console_log() -> Option<PathBuf> {
     let vdf_locations = steam_vdf_locations();
 
-    let path_re = regex::Regex::new(r#""path"\s+"([^"]+)""#).ok()?;
-    let dir_re = regex::Regex::new(r#""installdir"\s+"([^"]+)""#).ok()?;
+    let (path_re, dir_re) = VDF_PATTERNS.get_or_init(|| (
+        regex::Regex::new(r#""path"\s+"([^"]+)""#).unwrap(),
+        regex::Regex::new(r#""installdir"\s+"([^"]+)""#).unwrap(),
+    ));
 
     for vdf_path in &vdf_locations {
         let content = match std::fs::read_to_string(vdf_path) {
