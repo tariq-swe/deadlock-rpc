@@ -16,14 +16,10 @@ struct Patterns {
     server_disconnect: Regex,
     server_shutdown: Regex,
     map_created_physics: Regex,
-    mm_start: Regex,
-    mm_stop: Regex,
     host_activate: Regex,
     loaded_hero: Regex,
     client_hero_vmdl: Regex,
     map_info: Regex,
-    app_shutdown: Regex,
-    source2_shutdown: Regex,
     precaching_heroes: Regex,
     loop_mode_menu: Regex,
     lobby_created: Regex,
@@ -41,14 +37,10 @@ impl Patterns {
             server_disconnect: Regex::new(r"\[Client\] Disconnecting from server:\s+(\S+)").unwrap(),
             server_shutdown: Regex::new(r"\[Server\] SV:\s+Server shutting down:\s+(\S+)").unwrap(),
             map_created_physics: Regex::new(r"\[Client\] Created physics for\s+(\S+)").unwrap(),
-            mm_start: Regex::new(r"\[GCClient\] Send msg 9010 \(k_EMsgClientToGCStartMatchmaking\)").unwrap(),
-            mm_stop: Regex::new(r"\[GCClient\] Send msg 9012 \(k_EMsgClientToGCStopMatchmaking\)").unwrap(),
             host_activate: Regex::new(r"\[HostStateManager\] Host activate:.*\(([^)]+)\)").unwrap(),
             loaded_hero: Regex::new(r"\[Server\] Loaded hero \d+/(hero_\w+)").unwrap(),
             client_hero_vmdl: Regex::new(r"VMDL Camera Pose Success!.*models/heroes(?:_wip|_staging)?/(\w+)/").unwrap(),
             map_info: Regex::new(r#"\[Client\] Map:\s+"([^"]+)""#).unwrap(),
-            app_shutdown: Regex::new(r"Dispatching EventAppShutdown_t").unwrap(),
-            source2_shutdown: Regex::new(r"Source2Shutdown").unwrap(),
             precaching_heroes: Regex::new(r"Precaching (\d+) heroes in CCitadelGameRules").unwrap(),
             loop_mode_menu: Regex::new(r"LoopMode:\s*menu").unwrap(),
             lobby_created: Regex::new(r"Lobby\s+\d+\s+for\s+Match\s+\d+\s+created").unwrap(),
@@ -151,7 +143,6 @@ impl LogWatcher {
                     let mut gs = state.lock().unwrap();
                     let prev_hero = gs.hero_key.clone();
                     let prev_phase = gs.phase;
-                    gs.live_lines_seen += lines.len() as u64;
                     for line in &lines {
                         let trimmed = line.trim();
                         if !trimmed.is_empty() {
@@ -239,13 +230,13 @@ fn apply_map(state: &mut GameState, map_name: &str) {
         return;
     }
 
-    state.map_name = Some(map_lower.clone());
-
     if HIDEOUT_MAPS.contains(&map_lower.as_str()) {
         state.enter_hideout();
         state.map_name = Some(map_lower);
         return;
     }
+
+    state.map_name = Some(map_lower.clone());
 
     // Set mode from map name where it's unambiguous
     match map_lower.as_str() {
@@ -276,14 +267,14 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         apply_map(state, m.get(1).unwrap().as_str());
     } else if let Some(m) = p.map_created_physics.captures(line) {
         apply_map(state, m.get(1).unwrap().as_str());
-    } else if p.mm_start.is_match(line) {
+    } else if line.contains("k_EMsgClientToGCStartMatchmaking") {
         if matches!(
             state.phase,
             GamePhase::Hideout | GamePhase::MainMenu
         ) {
             state.enter_queue();
         }
-    } else if p.mm_stop.is_match(line) {
+    } else if line.contains("k_EMsgClientToGCStopMatchmaking") {
         if state.phase == GamePhase::InQueue {
             state.leave_queue();
         }
@@ -368,7 +359,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         if reason.contains("EXITING") {
             state.reset();
         }
-    } else if p.app_shutdown.is_match(line) || p.source2_shutdown.is_match(line) {
+    } else if line.contains("Dispatching EventAppShutdown_t") || line.contains("Source2Shutdown") {
         state.reset();
     } else if let Some(m) = p.precaching_heroes.captures(line) {
         let count: u32 = m.get(1).unwrap().as_str().parse().unwrap_or(0);

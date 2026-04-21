@@ -52,17 +52,19 @@ jobs:
       - name: Package (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          mkdir -p package/deadlock-rpc/logs
+          mkdir -p package/deadlock-rpc/assets package/deadlock-rpc/logs
           cp target/${{ matrix.target }}/release/${{ matrix.binary }} package/deadlock-rpc/deadlock-rpc
-          cp -r assets package/deadlock-rpc/assets
+          cp assets/icon.ico assets/icon.png package/deadlock-rpc/assets/
           cd package && zip -r ../${{ matrix.zip }} deadlock-rpc/
 
       - name: Package (Windows)
         if: matrix.os == 'windows-latest'
         run: |
+          New-Item -ItemType Directory -Force -Path package\deadlock-rpc\assets | Out-Null
           New-Item -ItemType Directory -Force -Path package\deadlock-rpc\logs | Out-Null
           Copy-Item target\${{ matrix.target }}\release\${{ matrix.binary }} package\deadlock-rpc\deadlock-rpc.exe
-          Copy-Item -Recurse assets package\deadlock-rpc\assets
+          Copy-Item assets\icon.ico package\deadlock-rpc\assets\icon.ico
+          Copy-Item assets\icon.png package\deadlock-rpc\assets\icon.png
           Compress-Archive -Path package\deadlock-rpc -DestinationPath ${{ matrix.zip }}
 
       - name: Upload artifact

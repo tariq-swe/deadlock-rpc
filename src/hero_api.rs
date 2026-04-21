@@ -33,19 +33,20 @@ impl HeroCache {
 
     /// Returns cached data if available, otherwise fetches from the API using the hero class_name.
     pub fn get_or_fetch(&mut self, hero_key: &str) -> Option<&HeroData> {
-        if !self.map.contains_key(hero_key) {
-            match fetch(hero_key) {
+        use std::collections::hash_map::Entry;
+        match self.map.entry(hero_key.to_owned()) {
+            Entry::Occupied(e) => Some(e.into_mut()),
+            Entry::Vacant(e) => match fetch(hero_key) {
                 Ok(data) => {
                     log!("[api] Cached: {} → \"{}\"", hero_key, data.name);
-                    self.map.insert(hero_key.to_string(), data);
+                    Some(e.insert(data))
                 }
-                Err(e) => {
-                    log!("[api] Failed to fetch {hero_key}: {e}");
-                    return None;
+                Err(err) => {
+                    log!("[api] Failed to fetch {hero_key}: {err}");
+                    None
                 }
-            }
+            },
         }
-        self.map.get(hero_key)
     }
 }
 
