@@ -41,6 +41,7 @@ fn build_activity<'a>(
     hero_data: Option<&'a HeroData>,
     status: &'a str,
     start_time: Option<i64>,
+    party_size: u8,
     img_cfg: &'a config::ImagesConfig,
     show_elapsed_timer: bool,
 ) -> activity::Activity<'a> {
@@ -70,6 +71,10 @@ fn build_activity<'a>(
         }
     }
 
+    if party_size > 1 {
+        act = act.party(activity::Party::new().size([party_size as i32, 6]));
+    }
+
     act
 }
 
@@ -94,7 +99,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Conf
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
-    let mut last_state: Option<(GamePhase, MatchMode, Option<String>)> = None;
+    let mut last_state: Option<(GamePhase, MatchMode, Option<String>, u8)> = None;
     let mut game_was_running = false;
 
     // If we launched the game, give it up to `launch_timeout_s` to appear before giving up.
@@ -107,9 +112,9 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Conf
     let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
 
     loop {
-        let (phase, match_mode, hero_key, start_time) = {
+        let (phase, match_mode, hero_key, start_time, party_size) = {
             let gs = state.lock().unwrap();
-            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.game_start_time)
+            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.game_start_time, gs.party_size)
         };
 
         if phase != GamePhase::NotRunning {
@@ -131,7 +136,7 @@ std::process::exit(0);
             }
         }
 
-        let current = (phase, match_mode, hero_key.clone());
+        let current = (phase, match_mode, hero_key.clone(), party_size);
         if last_state.as_ref() == Some(&current) {
             thread::sleep(update_interval);
             continue;
@@ -177,6 +182,7 @@ std::process::exit(0);
             effective_hero_data,
             &status,
             start_time,
+            party_size,
             &cfg.images,
             cfg.presence.show_elapsed_timer,
         );

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)] // Ranked and HeroLabs reserved for future detection
 pub enum MatchMode {
@@ -69,9 +71,13 @@ pub struct GameState {
     pub hero_key: Option<String>,
     pub map_name: Option<String>,
     pub game_start_time: Option<i64>,
+    pub party_size: u8,
     // internal tracking
     pub(crate) hero_window_open: bool,
     pub(crate) hideout_loaded: bool,
+    pub(crate) local_account_id: Option<u64>,
+    pub(crate) party_id: Option<u64>,
+    pub(crate) party_members: HashSet<u64>,
 }
 
 impl GameState {
@@ -82,8 +88,12 @@ impl GameState {
             hero_key: None,
             map_name: None,
             game_start_time: None,
+            party_size: 1,
             hero_window_open: true,
             hideout_loaded: false,
+            local_account_id: None,
+            party_id: None,
+            party_members: HashSet::new(),
         }
     }
 
@@ -96,6 +106,40 @@ impl GameState {
         self.hero_key = None;
         self.hero_window_open = true;
         self.hideout_loaded = false;
+    }
+
+    pub(crate) fn clear_party(&mut self) {
+        self.party_id = None;
+        self.party_members.clear();
+        self.party_size = 1;
+    }
+
+    pub(crate) fn apply_party_event(&mut self, party_id: u64, event_name: &str, account_id: u64) {
+        let ev = event_name.to_lowercase();
+        if ev.contains("joinedparty") {
+            let local = self.local_account_id.unwrap_or(u64::MAX);
+            if account_id == local {
+                self.party_id = Some(party_id);
+                self.party_members = std::iter::once(account_id).collect();
+            } else if self.party_id != Some(party_id) {
+                self.party_id = Some(party_id);
+                self.party_members.clear();
+            }
+            self.party_members.insert(account_id);
+            self.party_size = (self.party_members.len() as u8).max(2);
+        } else if ev.contains("leftparty")
+            || ev.contains("removedfromparty")
+            || ev.contains("kickedfromparty")
+        {
+            if account_id == self.local_account_id.unwrap_or(u64::MAX) {
+                self.clear_party();
+            } else {
+                self.party_members.remove(&account_id);
+                self.party_size = (self.party_members.len() as u8).max(1);
+            }
+        } else if ev.contains("disband") {
+            self.clear_party();
+        }
     }
 
     pub fn enter_main_menu(&mut self) {

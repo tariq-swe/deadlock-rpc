@@ -1,7 +1,7 @@
 use crate::game_state::{GamePhase, GameState, MatchMode};
 use crate::log;
 use regex::Regex;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -11,43 +11,55 @@ const HIDEOUT_MAPS: &[&str] = &["dl_hideout"];
 const RESYNC_BYTES: u64 = 10 * 1024 * 1024;
 
 struct Patterns {
-    change_game_state: Regex,
-    server_connect: Regex,
-    server_disconnect: Regex,
-    server_shutdown: Regex,
+    // Map / phase signals
+    map_info: Regex,
     map_created_physics: Regex,
     host_activate: Regex,
-    loaded_hero: Regex,
-    client_hero_vmdl: Regex,
-    map_info: Regex,
-    precaching_heroes: Regex,
     loop_mode_menu: Regex,
+    change_game_state: Regex,
+    precaching_heroes: Regex,
+    // Match lifecycle
     lobby_created: Regex,
     lobby_destroyed: Regex,
     spectate_broadcast: Regex,
+    // Server connection
+    server_connect: Regex,
+    server_disconnect: Regex,
+    server_shutdown: Regex,
+    // Hero signals
+    loaded_hero: Regex,
+    client_hero_vmdl: Regex,
+    // Match mode inference
     player_info: Regex,
     bot_init: Regex,
+    // Party tracking
+    hideout_lobby_state: Regex,
+    party_event: Regex,
+    local_account_id: Regex,
 }
 
 impl Patterns {
     fn new() -> Self {
         Self {
-            change_game_state: Regex::new(r"ChangeGameState:\s+(\w+)\s+\((\d+)\)").unwrap(),
-            server_connect: Regex::new(r"\[Client\] CL:\s+Connected to '([^']+)'").unwrap(),
-            server_disconnect: Regex::new(r"\[Client\] Disconnecting from server:\s+(\S+)").unwrap(),
-            server_shutdown: Regex::new(r"\[Server\] SV:\s+Server shutting down:\s+(\S+)").unwrap(),
-            map_created_physics: Regex::new(r"\[Client\] Created physics for\s+(\S+)").unwrap(),
-            host_activate: Regex::new(r"\[HostStateManager\] Host activate:.*\(([^)]+)\)").unwrap(),
-            loaded_hero: Regex::new(r"\[Server\] Loaded hero \d+/(hero_\w+)").unwrap(),
-            client_hero_vmdl: Regex::new(r"VMDL Camera Pose Success!.*models/heroes(?:_wip|_staging)?/(\w+)/").unwrap(),
             map_info: Regex::new(r#"\[Client\] Map:\s+"([^"]+)""#).unwrap(),
-            precaching_heroes: Regex::new(r"Precaching (\d+) heroes in CCitadelGameRules").unwrap(),
+            map_created_physics: Regex::new(r"\[Client\] Created physics for\s+([^\s]+)").unwrap(),
+            host_activate: Regex::new(r"\[HostStateManager\] Host activate:.*\(([^)]+)\)").unwrap(),
             loop_mode_menu: Regex::new(r"LoopMode:\s*menu").unwrap(),
+            change_game_state: Regex::new(r"ChangeGameState:\s+(\w+)\s+\((\d+)\)").unwrap(),
+            precaching_heroes: Regex::new(r"Precaching (\d+) heroes in CCitadelGameRules").unwrap(),
             lobby_created: Regex::new(r"Lobby\s+\d+\s+for\s+Match\s+\d+\s+created").unwrap(),
             lobby_destroyed: Regex::new(r"Lobby\s+\d+\s+for\s+Match\s+\d+\s+destroyed").unwrap(),
             spectate_broadcast: Regex::new(r"Playing Broadcast").unwrap(),
+            server_connect: Regex::new(r"\[Client\] CL:\s+Connected to '([^']+)'").unwrap(),
+            server_disconnect: Regex::new(r"\[Client\] Disconnecting from server:\s+(\S+)").unwrap(),
+            server_shutdown: Regex::new(r"\[Server\] SV:\s+Server shutting down:\s+(\S+)").unwrap(),
+            loaded_hero: Regex::new(r"\[Server\] Loaded hero \d+/(hero_\w+)").unwrap(),
+            client_hero_vmdl: Regex::new(r"VMDL Camera Pose Success!.*models/heroes(?:_wip|_staging)?/(\w+)/").unwrap(),
             player_info: Regex::new(r"\[Client\] Players:\s+(\d+)\s+\(\d+ bots\)\s+/\s+\d+ humans").unwrap(),
             bot_init: Regex::new(r"Initializing bot for player slot \d+:\s+k_ECitadelBotDifficulty_\w+").unwrap(),
+            hideout_lobby_state: Regex::new(r"\[Hideout\] Hideout Lobby Connection State:\s+(\w+)\s+\((-?\d+)\)").unwrap(),
+            party_event: Regex::new(r"CMsgGCToClientPartyEvent:\s+\{\s*party_id:\s+(\d+)\s+event:\s+(k_e\w+)\s+initiator_account_id:\s+(\d+)\s*\}").unwrap(),
+            local_account_id: Regex::new(r"\[U:1:(\d+)\]").unwrap(),
         }
     }
 }
@@ -114,8 +126,8 @@ impl LogWatcher {
                         process_line(line.trim(), &mut gs, &patterns);
                     }
                     log!(
-                        "[resync] Live log — phase={:?} hero={:?} ({} lines)",
-                        gs.phase, gs.hero_key, lines.len()
+                        "[resync] Live log — phase={:?} hero={:?} party={} ({} lines)",
+                        gs.phase, gs.hero_key, gs.party_size, lines.len()
                     );
                 } else {
                     log!("[resync] Stale log (written before app started) — waiting for game...");
@@ -143,6 +155,7 @@ impl LogWatcher {
                     let mut gs = state.lock().unwrap();
                     let prev_hero = gs.hero_key.clone();
                     let prev_phase = gs.phase;
+                    let prev_party = gs.party_size;
                     for line in &lines {
                         let trimmed = line.trim();
                         if !trimmed.is_empty() {
@@ -154,6 +167,9 @@ impl LogWatcher {
                     }
                     if gs.hero_key != prev_hero {
                         log!("[hero]  {:?} → {:?}", prev_hero, gs.hero_key);
+                    }
+                    if gs.party_size != prev_party {
+                        log!("[party] {} → {}", prev_party, gs.party_size);
                     }
                 }
 
@@ -189,17 +205,25 @@ impl LogWatcher {
 
 /// Opens the log file, seeks to `offset`, and returns all complete lines from that point.
 /// If `skip_partial` is true, discards the first (potentially incomplete) line after seeking.
+///
+/// Uses `from_utf8_lossy` to replace invalid bytes (e.g. non-ASCII player names) with
+/// U+FFFD rather than stopping iteration — equivalent to Python's `errors="replace"`.
 fn read_lines_from(path: &std::path::Path, offset: u64, skip_partial: bool) -> Vec<String> {
-    let Ok(file) = std::fs::File::open(path) else {
+    let Ok(mut file) = std::fs::File::open(path) else {
         return Vec::new();
     };
-    let mut br = BufReader::new(file);
-    br.seek(SeekFrom::Start(offset)).ok();
-    if skip_partial {
-        let mut buf = String::new();
-        br.read_line(&mut buf).ok();
+    if file.seek(SeekFrom::Start(offset)).is_err() {
+        return Vec::new();
     }
-    br.lines().map_while(Result::ok).collect()
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).ok();
+
+    let content = String::from_utf8_lossy(&bytes);
+    let mut lines = content.lines();
+    if skip_partial {
+        lines.next(); // discard the incomplete line at the seek boundary
+    }
+    lines.map(str::to_owned).collect()
 }
 
 /// Normalise a raw hero key from the log: lowercase, strip version suffix (_v2, _v3, …),
@@ -257,6 +281,29 @@ fn apply_map(state: &mut GameState, map_name: &str) {
 }
 
 fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
+    // --- Standalone checks — run before the main chain because these patterns
+    //     can co-appear on the same log line as other events. ---
+
+    // Capture local player's Steam ID3 the first time it appears.
+    if state.local_account_id.is_none() {
+        if let Some(m) = p.local_account_id.captures(line) {
+            let id: u64 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
+            if id > 0 {
+                state.local_account_id = Some(id);
+            }
+        }
+    }
+
+    // Party join/leave/disband events.
+    if let Some(m) = p.party_event.captures(line) {
+        let party_id: u64 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
+        let event_name = m.get(2).unwrap().as_str();
+        let account_id: u64 = m.get(3).unwrap().as_str().parse().unwrap_or(0);
+        state.apply_party_event(party_id, event_name, account_id);
+    }
+
+    // --- Main elif chain — each line is claimed by at most one pattern. ---
+
     let is_hideout_map = state
         .map_name
         .as_deref()
@@ -348,6 +395,12 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
                     state.end_match();
                 }
             }
+        }
+    } else if let Some(m) = p.hideout_lobby_state.captures(line) {
+        // lobby_id == 0 means the player is solo (no active party lobby).
+        let lobby_id: i64 = m.get(2).unwrap().as_str().parse().unwrap_or(-1);
+        if lobby_id == 0 && matches!(state.phase, GamePhase::Hideout) {
+            state.clear_party();
         }
     } else if let Some(m) = p.host_activate.captures(line) {
         let map_name = m.get(1).unwrap().as_str().to_lowercase();
