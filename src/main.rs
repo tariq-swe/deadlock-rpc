@@ -41,10 +41,8 @@ fn build_activity<'a>(
     hero_data: Option<&'a HeroData>,
     state: Option<&'a str>,
     start_time: Option<i64>,
-    show_party: bool,
-    party_size: u8,
+    party_size: Option<u8>,
     img_cfg: &'a config::ImagesConfig,
-    show_elapsed_timer: bool,
 ) -> activity::Activity<'a> {
     let large_image = hero_data
         .filter(|d| !d.icon_url.is_empty())
@@ -69,14 +67,12 @@ fn build_activity<'a>(
         act = act.state(s);
     }
 
-    if show_elapsed_timer {
-        if let Some(ts) = start_time {
-            act = act.timestamps(activity::Timestamps::new().start(ts));
-        }
+    if let Some(ts) = start_time {
+        act = act.timestamps(activity::Timestamps::new().start(ts));
     }
 
-    if show_party {
-        act = act.party(activity::Party::new().size([party_size as i32, 6]));
+    if let Some(size) = party_size {
+        act = act.party(activity::Party::new().size([size as i32, 6]));
     }
 
     act
@@ -192,15 +188,15 @@ std::process::exit(0);
             details
         );
 
+        let elapsed_start = if cfg.presence.show_elapsed_timer { start_time } else { None };
+        let party = if show_party { Some(party_size) } else { None };
         let act = build_activity(
             details,
             effective_hero_data,
             state_opt,
-            start_time,
-            show_party,
-            party_size,
+            elapsed_start,
+            party,
             &cfg.images,
-            cfg.presence.show_elapsed_timer,
         );
 
         match client.set_activity(act) {
