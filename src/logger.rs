@@ -19,11 +19,13 @@ pub fn init() {
 }
 
 pub fn write_log(msg: &str) {
+    let ts = timestamp();
+    let line = format!("[{ts}] {msg}");
+    eprintln!("{line}");
     if let Some(m) = LOGGER.get() {
-        let ts = timestamp();
-        let line = format!("[{ts}] {msg}\n");
         if let Ok(mut w) = m.lock() {
             let _ = w.write_all(line.as_bytes());
+            let _ = w.write_all(b"\n");
         }
     }
 }

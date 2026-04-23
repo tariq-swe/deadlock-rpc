@@ -227,6 +227,16 @@ impl GameState {
         }
     }
 
+    /// Authoritatively set the hero from a client-side signal (e.g. VMDL camera pose).
+    /// Bypasses the match lock-in so this always wins over server-side signals.
+    pub fn set_hero_from_client(&mut self, hero_key: &str) {
+        if self.phase == GamePhase::Spectating {
+            return;
+        }
+        self.hero_key = Some(hero_key.to_string());
+        self.hero_window_open = false;
+    }
+
     pub fn apply_hero_signal(&mut self, hero_key: &str) {
         if self.phase == GamePhase::Spectating {
             return;
