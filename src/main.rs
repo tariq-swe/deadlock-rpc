@@ -39,10 +39,10 @@ fn connect_discord(app_id: &str) -> DiscordIpcClient {
 fn build_activity<'a>(
     details: &'a str,
     hero_data: Option<&'a HeroData>,
-    status: &'a str,
+    state: Option<&'a str>,
     start_time: Option<i64>,
+    party_size: Option<u8>,
     img_cfg: &'a config::ImagesConfig,
-    show_elapsed_timer: bool,
 ) -> activity::Activity<'a> {
     let large_image = hero_data
         .filter(|d| !d.icon_url.is_empty())
@@ -61,13 +61,18 @@ fn build_activity<'a>(
 
     let mut act = activity::Activity::new()
         .details(details)
-        .state(status)
         .assets(assets);
 
-    if show_elapsed_timer {
-        if let Some(ts) = start_time {
-            act = act.timestamps(activity::Timestamps::new().start(ts));
-        }
+    if let Some(s) = state {
+        act = act.state(s);
+    }
+
+    if let Some(ts) = start_time {
+        act = act.timestamps(activity::Timestamps::new().start(ts));
+    }
+
+    if let Some(size) = party_size {
+        act = act.party(activity::Party::new().size([size as i32, 6]));
     }
 
     act
@@ -94,7 +99,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Conf
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
-    let mut last_state: Option<(GamePhase, MatchMode, Option<String>)> = None;
+    let mut last_state: Option<(GamePhase, MatchMode, Option<String>, u8)> = None;
     let mut game_was_running = false;
 
     // If we launched the game, give it up to `launch_timeout_s` to appear before giving up.
@@ -107,9 +112,9 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Conf
     let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
 
     loop {
-        let (phase, match_mode, hero_key, start_time) = {
+        let (phase, match_mode, hero_key, start_time, party_size) = {
             let gs = state.lock().unwrap();
-            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.game_start_time)
+            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.game_start_time, gs.party_size)
         };
 
         if phase != GamePhase::NotRunning {
@@ -131,7 +136,7 @@ std::process::exit(0);
             }
         }
 
-        let current = (phase, match_mode, hero_key.clone());
+        let current = (phase, match_mode, hero_key.clone(), party_size);
         if last_state.as_ref() == Some(&current) {
             thread::sleep(update_interval);
             continue;
@@ -151,13 +156,12 @@ std::process::exit(0);
 
         let hideout_text: Option<&str> = effective_hero_data.map(|d| d.hideout_text.as_str());
 
-        let status = {
+        let game_status: String = {
             let gs = state.lock().unwrap();
             gs.presence_status(hideout_text, hero_name, &cfg.presence.status)
         };
 
-        // Build the details line from config templates.
-        let details: String = match hero_name {
+        let hero_label: String = match hero_name {
             Some(name) => config::apply_vars(&cfg.presence.details_with_hero, &[("hero", name)]),
             None => config::apply_vars(
                 &cfg.presence.details_no_hero,
@@ -165,20 +169,34 @@ std::process::exit(0);
             ),
         };
 
+        // Party is only shown in the Hideout.
+        let show_party = phase == GamePhase::Hideout && party_size > 1;
+
+        // Hideout: hideout text on top, party line on bottom (or nothing if solo).
+        // All other phases: hero/phase label on top, game status on bottom, no party.
+        let (details, state_opt): (&str, Option<&str>) = if phase == GamePhase::Hideout {
+            let s = if show_party { Some("In a Party") } else { None };
+            (game_status.as_str(), s)
+        } else {
+            (hero_label.as_str(), Some(game_status.as_str()))
+        };
+
         log!(
-            "[rpc] phase={:?} hero={} status=\"{}\"",
+            "[rpc] phase={:?} hero={} details=\"{}\"",
             phase,
             hero_key.as_deref().unwrap_or("none"),
-            status
+            details
         );
 
+        let elapsed_start = if cfg.presence.show_elapsed_timer { start_time } else { None };
+        let party = if show_party { Some(party_size) } else { None };
         let act = build_activity(
-            &details,
+            details,
             effective_hero_data,
-            &status,
-            start_time,
+            state_opt,
+            elapsed_start,
+            party,
             &cfg.images,
-            cfg.presence.show_elapsed_timer,
         );
 
         match client.set_activity(act) {
