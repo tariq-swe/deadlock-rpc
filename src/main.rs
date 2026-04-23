@@ -39,8 +39,9 @@ fn connect_discord(app_id: &str) -> DiscordIpcClient {
 fn build_activity<'a>(
     details: &'a str,
     hero_data: Option<&'a HeroData>,
-    status: &'a str,
+    state: Option<&'a str>,
     start_time: Option<i64>,
+    show_party: bool,
     party_size: u8,
     img_cfg: &'a config::ImagesConfig,
     show_elapsed_timer: bool,
@@ -62,8 +63,11 @@ fn build_activity<'a>(
 
     let mut act = activity::Activity::new()
         .details(details)
-        .state(status)
         .assets(assets);
+
+    if let Some(s) = state {
+        act = act.state(s);
+    }
 
     if show_elapsed_timer {
         if let Some(ts) = start_time {
@@ -71,7 +75,7 @@ fn build_activity<'a>(
         }
     }
 
-    if party_size > 1 {
+    if show_party {
         act = act.party(activity::Party::new().size([party_size as i32, 6]));
     }
 
@@ -156,13 +160,12 @@ std::process::exit(0);
 
         let hideout_text: Option<&str> = effective_hero_data.map(|d| d.hideout_text.as_str());
 
-        let status = {
+        let game_status: String = {
             let gs = state.lock().unwrap();
             gs.presence_status(hideout_text, hero_name, &cfg.presence.status)
         };
 
-        // Build the details line from config templates.
-        let details: String = match hero_name {
+        let hero_label: String = match hero_name {
             Some(name) => config::apply_vars(&cfg.presence.details_with_hero, &[("hero", name)]),
             None => config::apply_vars(
                 &cfg.presence.details_no_hero,
@@ -170,18 +173,31 @@ std::process::exit(0);
             ),
         };
 
+        // Party is only shown in the Hideout.
+        let show_party = phase == GamePhase::Hideout && party_size > 1;
+
+        // Hideout: hideout text on top, party line on bottom (or nothing if solo).
+        // All other phases: hero/phase label on top, game status on bottom, no party.
+        let (details, state_opt): (&str, Option<&str>) = if phase == GamePhase::Hideout {
+            let s = if show_party { Some("In a Party") } else { None };
+            (game_status.as_str(), s)
+        } else {
+            (hero_label.as_str(), Some(game_status.as_str()))
+        };
+
         log!(
-            "[rpc] phase={:?} hero={} status=\"{}\"",
+            "[rpc] phase={:?} hero={} details=\"{}\"",
             phase,
             hero_key.as_deref().unwrap_or("none"),
-            status
+            details
         );
 
         let act = build_activity(
-            &details,
+            details,
             effective_hero_data,
-            &status,
+            state_opt,
             start_time,
+            show_party,
             party_size,
             &cfg.images,
             cfg.presence.show_elapsed_timer,
