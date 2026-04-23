@@ -348,18 +348,16 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         let state_name = m.get(1).unwrap().as_str().to_lowercase();
         let state_id: u32 = m.get(2).unwrap().as_str().parse().unwrap_or(0);
         log!("[dbg] matched change_game_state: name={state_name:?} id={state_id} phase={:?} is_hideout_map={is_hideout_map}", state.phase);
-        if state.phase != GamePhase::Spectating && !is_hideout_map {
-            if !state.hideout_loaded {
-                if state_name == "matchintro" || state_id == 4 {
-                    state.enter_match_intro();
-                } else if state_name == "gameinprogress"
-                    || state_name == "inprogress"
-                    || state_id == 7
-                {
-                    state.start_match();
-                } else if state_name == "postgame" || state_id == 6 {
-                    state.end_match();
-                }
+        if state.phase != GamePhase::Spectating && !is_hideout_map && !state.hideout_loaded {
+            if state_name == "matchintro" || state_id == 4 {
+                state.enter_match_intro();
+            } else if state_name == "gameinprogress"
+                || state_name == "inprogress"
+                || state_id == 7
+            {
+                state.start_match();
+            } else if state_name == "postgame" || state_id == 6 {
+                state.end_match();
             }
         }
     } else if let Some(m) = p.host_activate.captures(line) {
