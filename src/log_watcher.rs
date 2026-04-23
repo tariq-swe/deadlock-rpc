@@ -263,11 +263,15 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         .map(|m| HIDEOUT_MAPS.contains(&m))
         .unwrap_or(false);
 
+
     if let Some(m) = p.map_info.captures(line) {
+        log!("[dbg] matched map_info: {:?}", m.get(1).unwrap().as_str());
         apply_map(state, m.get(1).unwrap().as_str());
     } else if let Some(m) = p.map_created_physics.captures(line) {
+        log!("[dbg] matched map_created_physics: {:?}", m.get(1).unwrap().as_str());
         apply_map(state, m.get(1).unwrap().as_str());
     } else if line.contains("k_EMsgClientToGCStartMatchmaking") {
+        log!("[dbg] matched StartMatchmaking, phase={:?}", state.phase);
         if matches!(
             state.phase,
             GamePhase::Hideout | GamePhase::MainMenu
@@ -275,10 +279,12 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.enter_queue();
         }
     } else if line.contains("k_EMsgClientToGCStopMatchmaking") {
+        log!("[dbg] matched StopMatchmaking, phase={:?}", state.phase);
         if state.phase == GamePhase::InQueue {
             state.leave_queue();
         }
     } else if p.lobby_created.is_match(line) {
+        log!("[dbg] matched lobby_created, phase={:?}", state.phase);
         state.prepare_match_hero_tracking();
         if matches!(
             state.phase,
@@ -287,13 +293,16 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.enter_match_intro();
         }
     } else if p.lobby_destroyed.is_match(line) {
+        log!("[dbg] matched lobby_destroyed");
         state.end_match();
     } else if p.spectate_broadcast.is_match(line) {
+        log!("[dbg] matched spectate_broadcast");
         state.enter_spectating();
         state.hideout_loaded = false;
     } else if let Some(m) = p.server_connect.captures(line) {
         let addr = m.get(1).unwrap().as_str();
         let is_real = !addr.to_lowercase().contains("loopback");
+        log!("[dbg] matched server_connect: addr={addr:?} is_real={is_real}");
         if is_real {
             state.prepare_match_hero_tracking();
             if matches!(
@@ -306,14 +315,17 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
     } else if let Some(m) = p.loaded_hero.captures(line) {
         let hero = normalize_hero_key(m.get(1).unwrap().as_str());
         let is_hideout = matches!(state.phase, GamePhase::Hideout);
+        log!("[dbg] matched loaded_hero: hero={hero:?} is_hideout={is_hideout} hideout_loaded={}", state.hideout_loaded);
         if !is_hideout || state.hideout_loaded {
             state.apply_hero_signal(&hero);
         }
     } else if let Some(m) = p.client_hero_vmdl.captures(line) {
         let hero = normalize_hero_key(m.get(1).unwrap().as_str());
-        state.apply_hero_signal(&hero);
+        log!("[dbg] matched client_hero_vmdl: hero={hero:?}");
+        state.set_hero_from_client(&hero);
     } else if let Some(m) = p.server_disconnect.captures(line) {
         let reason = m.get(1).unwrap().as_str().to_uppercase();
+        log!("[dbg] matched server_disconnect: reason={reason:?}");
         if reason.contains("EXITING") {
             state.reset();
         } else if !reason.contains("LOOPDEACTIVATE")
@@ -325,6 +337,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.end_match();
         }
     } else if p.loop_mode_menu.is_match(line) {
+        log!("[dbg] matched loop_mode_menu, phase={:?}", state.phase);
         if matches!(
             state.phase,
             GamePhase::InMatch | GamePhase::MatchIntro | GamePhase::Spectating
@@ -332,37 +345,39 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.end_match();
         }
     } else if let Some(m) = p.change_game_state.captures(line) {
-        if state.phase != GamePhase::Spectating && !is_hideout_map {
-            let state_name = m.get(1).unwrap().as_str().to_lowercase();
-            let state_id: u32 = m.get(2).unwrap().as_str().parse().unwrap_or(0);
-
-            if !state.hideout_loaded {
-                if state_name == "matchintro" || state_id == 4 {
-                    state.enter_match_intro();
-                } else if state_name == "gameinprogress"
-                    || state_name == "inprogress"
-                    || state_id == 7
-                {
-                    state.start_match();
-                } else if state_name == "postgame" || state_id == 6 {
-                    state.end_match();
-                }
+        let state_name = m.get(1).unwrap().as_str().to_lowercase();
+        let state_id: u32 = m.get(2).unwrap().as_str().parse().unwrap_or(0);
+        log!("[dbg] matched change_game_state: name={state_name:?} id={state_id} phase={:?} is_hideout_map={is_hideout_map}", state.phase);
+        if state.phase != GamePhase::Spectating && !is_hideout_map && !state.hideout_loaded {
+            if state_name == "matchintro" || state_id == 4 {
+                state.enter_match_intro();
+            } else if state_name == "gameinprogress"
+                || state_name == "inprogress"
+                || state_id == 7
+            {
+                state.start_match();
+            } else if state_name == "postgame" || state_id == 6 {
+                state.end_match();
             }
         }
     } else if let Some(m) = p.host_activate.captures(line) {
         let map_name = m.get(1).unwrap().as_str().to_lowercase();
+        log!("[dbg] matched host_activate: map={map_name:?}");
         if HIDEOUT_MAPS.contains(&map_name.as_str()) {
             state.hideout_loaded = true;
         }
     } else if let Some(m) = p.server_shutdown.captures(line) {
         let reason = m.get(1).unwrap().as_str().to_uppercase();
+        log!("[dbg] matched server_shutdown: reason={reason:?}");
         if reason.contains("EXITING") {
             state.reset();
         }
     } else if line.contains("Dispatching EventAppShutdown_t") || line.contains("Source2Shutdown") {
+        log!("[dbg] matched app shutdown signal");
         state.reset();
     } else if let Some(m) = p.precaching_heroes.captures(line) {
         let count: u32 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
+        log!("[dbg] matched precaching_heroes: count={count}");
         if count > 0 {
             state.hideout_loaded = false;
         }
@@ -372,6 +387,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             GamePhase::MatchIntro | GamePhase::InMatch
         ) {
             let player_count: u32 = m.get(1).unwrap().as_str().parse::<u32>().unwrap_or(0);
+            log!("[dbg] matched player_info: count={player_count} mode={:?}", state.match_mode);
             if matches!(state.match_mode, MatchMode::Unknown | MatchMode::BotMatch)
                 && player_count >= 9
             {
@@ -383,6 +399,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         && matches!(state.phase, GamePhase::MatchIntro | GamePhase::InMatch)
         && state.match_mode == MatchMode::Unknown
     {
+        log!("[dbg] matched bot_init");
         state.match_mode = MatchMode::BotMatch;
     }
 }
