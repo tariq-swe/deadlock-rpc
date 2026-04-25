@@ -81,14 +81,9 @@ fn build_activity<'a>(
 
 /// Binds a local port to prevent multiple instances running simultaneously.
 /// The OS releases the port automatically when the process exits.
-fn acquire_single_instance_lock() -> Option<std::net::TcpListener> {
-    match std::net::TcpListener::bind("127.0.0.1:47782") {
-        Ok(l) => Some(l),
-        Err(_) => {
-            log!("[deadlock-rpc] Another instance is already running. Exiting.");
-            std::process::exit(0);
-        }
-    }
+/// Returns None if another instance already holds the port.
+fn try_acquire_single_instance_lock() -> Option<std::net::TcpListener> {
+    std::net::TcpListener::bind("127.0.0.1:47782").ok()
 }
 
 fn exit_discord(client: &mut DiscordIpcClient) {
@@ -206,8 +201,7 @@ fn main() {
     // on Windows we exit before the port is ever bound — so no lock conflicts.
     updater::check_on_startup();
 
-    // Ensure only one instance runs at a time.
-    let _instance_lock = acquire_single_instance_lock();
+    let instance_lock = try_acquire_single_instance_lock();
 
     logger::init();
 
@@ -216,6 +210,17 @@ fn main() {
 
     // --no-launch CLI flag always overrides auto_launch, even if config enables it.
     let no_launch = args.iter().any(|a| a == "--no-launch") || !cfg.general.auto_launch;
+
+    if instance_lock.is_none() {
+        if !no_launch {
+            log!("[deadlock-rpc] Another instance is running — re-triggering launch (Steam may be updating).");
+            launcher::launch_deadlock();
+        } else {
+            log!("[deadlock-rpc] Another instance is already running. Exiting.");
+        }
+        std::process::exit(0);
+    }
+    let _instance_lock = instance_lock;
 
     // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
     #[cfg(not(debug_assertions))]
