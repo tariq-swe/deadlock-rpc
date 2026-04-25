@@ -6,6 +6,7 @@ mod hero_api;
 mod launcher;
 mod logger;
 mod log_watcher;
+mod process_watcher;
 mod steam;
 mod tray;
 mod updater;
@@ -80,14 +81,9 @@ fn build_activity<'a>(
 
 /// Binds a local port to prevent multiple instances running simultaneously.
 /// The OS releases the port automatically when the process exits.
-fn acquire_single_instance_lock() -> Option<std::net::TcpListener> {
-    match std::net::TcpListener::bind("127.0.0.1:47782") {
-        Ok(l) => Some(l),
-        Err(_) => {
-            log!("[deadlock-rpc] Another instance is already running. Exiting.");
-            std::process::exit(0);
-        }
-    }
+/// Returns None if another instance already holds the port.
+fn try_acquire_single_instance_lock() -> Option<std::net::TcpListener> {
+    std::net::TcpListener::bind("127.0.0.1:47782").ok()
 }
 
 fn exit_discord(client: &mut DiscordIpcClient) {
@@ -95,19 +91,12 @@ fn exit_discord(client: &mut DiscordIpcClient) {
     let _ = client.close();
 }
 
-fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Config) {
+fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
     let mut last_state: Option<(GamePhase, MatchMode, Option<String>, u8)> = None;
     let mut game_was_running = false;
-
-    // If we launched the game, give it up to `launch_timeout_s` to appear before giving up.
-    let launch_deadline = if !no_launch {
-        Some(std::time::Instant::now() + Duration::from_secs(cfg.general.launch_timeout_s))
-    } else {
-        None
-    };
 
     let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
 
@@ -124,15 +113,6 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Conf
             if cfg.general.auto_exit {
                 exit_discord(&mut client);
 std::process::exit(0);
-            }
-        } else if let Some(deadline) = launch_deadline {
-            if std::time::Instant::now() > deadline {
-                log!(
-                    "[deadlock-rpc] Game did not launch within {}s, exiting.",
-                    cfg.general.launch_timeout_s
-                );
-                exit_discord(&mut client);
-                std::process::exit(0);
             }
         }
 
@@ -216,13 +196,18 @@ std::process::exit(0);
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
+    // Debug-only: --simulate-update fakes the full update flow then re-execs.
+    #[cfg(debug_assertions)]
+    if args.iter().any(|a| a == "--simulate-update") {
+        updater::simulate_update();
+    }
+
     // Check for updates before acquiring the instance lock.
     // If an update is applied: on Linux exec() replaces this process in-place;
     // on Windows we exit before the port is ever bound — so no lock conflicts.
     updater::check_on_startup();
 
-    // Ensure only one instance runs at a time.
-    let _instance_lock = acquire_single_instance_lock();
+    let instance_lock = try_acquire_single_instance_lock();
 
     logger::init();
 
@@ -231,6 +216,17 @@ fn main() {
 
     // --no-launch CLI flag always overrides auto_launch, even if config enables it.
     let no_launch = args.iter().any(|a| a == "--no-launch") || !cfg.general.auto_launch;
+
+    if instance_lock.is_none() {
+        if !no_launch {
+            log!("[deadlock-rpc] Another instance is running — re-triggering launch (Steam may be updating).");
+            launcher::launch_deadlock();
+        } else {
+            log!("[deadlock-rpc] Another instance is already running. Exiting.");
+        }
+        std::process::exit(0);
+    }
+    let _instance_lock = instance_lock;
 
     // Only install the shortcut in release builds so dev runs don't overwrite it with a debug path.
     #[cfg(not(debug_assertions))]
@@ -253,7 +249,12 @@ fn main() {
 
     {
         let state = Arc::clone(&state);
-        thread::spawn(move || run_rpc_loop(state, no_launch, cfg));
+        thread::spawn(move || process_watcher::ProcessWatcher::run(state));
+    }
+
+    {
+        let state = Arc::clone(&state);
+        thread::spawn(move || run_rpc_loop(state, cfg));
     }
 
     // Block the main thread on the tray icon for the lifetime of the process.
