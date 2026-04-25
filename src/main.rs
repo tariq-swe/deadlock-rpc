@@ -6,6 +6,7 @@ mod hero_api;
 mod launcher;
 mod logger;
 mod log_watcher;
+mod process_watcher;
 mod steam;
 mod tray;
 mod updater;
@@ -253,7 +254,12 @@ fn main() {
 
     {
         let state = Arc::clone(&state);
-        thread::spawn(move || run_rpc_loop(state, no_launch, cfg));
+        thread::spawn(move || process_watcher::ProcessWatcher::run(state));
+    }
+
+    {
+        let state = Arc::clone(&state);
+        thread::spawn(move || run_rpc_loop(state, cfg));
     }
 
     // Block the main thread on the tray icon for the lifetime of the process.
