@@ -96,19 +96,12 @@ fn exit_discord(client: &mut DiscordIpcClient) {
     let _ = client.close();
 }
 
-fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Config) {
+fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
     let mut last_state: Option<(GamePhase, MatchMode, Option<String>, u8)> = None;
     let mut game_was_running = false;
-
-    // If we launched the game, give it up to `launch_timeout_s` to appear before giving up.
-    let launch_deadline = if !no_launch {
-        Some(std::time::Instant::now() + Duration::from_secs(cfg.general.launch_timeout_s))
-    } else {
-        None
-    };
 
     let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
 
@@ -123,15 +116,6 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, no_launch: bool, cfg: config::Conf
         } else if game_was_running {
             log!("[deadlock-rpc] Game closed.");
             if cfg.general.auto_exit {
-                exit_discord(&mut client);
-std::process::exit(0);
-            }
-        } else if let Some(deadline) = launch_deadline {
-            if std::time::Instant::now() > deadline {
-                log!(
-                    "[deadlock-rpc] Game did not launch within {}s, exiting.",
-                    cfg.general.launch_timeout_s
-                );
                 exit_discord(&mut client);
                 std::process::exit(0);
             }

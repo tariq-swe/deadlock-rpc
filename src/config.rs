@@ -17,8 +17,6 @@ pub struct GeneralConfig {
     pub auto_launch: bool,
     /// Exit deadlock-rpc when the game closes.
     pub auto_exit: bool,
-    /// Seconds to wait for the game to appear after launch before giving up.
-    pub launch_timeout_s: u64,
     /// Milliseconds between game log polls.
     pub log_poll_interval_ms: u64,
     /// Seconds between Discord presence refreshes.
@@ -79,7 +77,6 @@ impl Default for GeneralConfig {
         Self {
             auto_launch: true,
             auto_exit: true,
-            launch_timeout_s: 120,
             log_poll_interval_ms: 500,
             presence_update_interval_s: 5,
         }
@@ -186,9 +183,6 @@ auto_launch = true
 # Exit deadlock-rpc automatically when the game closes.
 # Set to false to keep it running (useful if you restart the game often).
 auto_exit = true
-
-# Seconds to wait for the game to appear after launch before giving up.
-launch_timeout_s = 120
 
 # Milliseconds between game log polls. Lower = faster state detection, slightly more I/O.
 # Minimum recommended: 100. Default: 500.
