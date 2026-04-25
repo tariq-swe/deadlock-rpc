@@ -67,6 +67,54 @@ fn notify(body: &str) {
 #[cfg(windows)]
 fn notify(_body: &str) {}
 
+/// Debug-only: simulates an update prompt for v99.9.9, fake-downloads, then
+/// re-execs the binary without `--simulate-update` to mimic a post-update launch.
+#[cfg(debug_assertions)]
+pub fn simulate_update() {
+    const FAKE_VERSION: &str = "99.9.9";
+    log!("[updater] [debug] Simulating update to v{FAKE_VERSION}");
+
+    #[cfg(unix)]
+    if !prompt_update_linux(FAKE_VERSION) {
+        log!("[updater] [debug] User skipped simulated update");
+        return;
+    }
+    #[cfg(windows)]
+    if !prompt_update_windows(FAKE_VERSION) {
+        log!("[updater] [debug] User skipped simulated update");
+        return;
+    }
+
+    log!("[updater] [debug] Simulating download (3s)...");
+    notify("Downloading and installing update, launching shortly...");
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    log!("[updater] [debug] Simulated download complete, restarting...");
+
+    let exe_path = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            log!("[updater] [debug] Failed to get exe path: {e}");
+            return;
+        }
+    };
+    let args: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|a| a != "--simulate-update")
+        .collect();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let err = std::process::Command::new(&exe_path).args(&args).exec();
+        log!("[updater] [debug] exec failed: {err}");
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new(&exe_path).args(&args).spawn();
+        std::process::exit(0);
+    }
+}
+
 /// Called at startup before anything else. If a newer release exists the user
 /// is prompted. If they accept, the update is downloaded, applied, and the
 /// process is replaced (Linux: exec, Windows: PowerShell swap + exit).

@@ -112,7 +112,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
             log!("[deadlock-rpc] Game closed.");
             if cfg.general.auto_exit {
                 exit_discord(&mut client);
-                std::process::exit(0);
+std::process::exit(0);
             }
         }
 
@@ -195,6 +195,12 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+
+    // Debug-only: --simulate-update fakes the full update flow then re-execs.
+    #[cfg(debug_assertions)]
+    if args.iter().any(|a| a == "--simulate-update") {
+        updater::simulate_update();
+    }
 
     // Check for updates before acquiring the instance lock.
     // If an update is applied: on Linux exec() replaces this process in-place;
