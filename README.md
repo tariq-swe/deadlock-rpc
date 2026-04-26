@@ -19,7 +19,9 @@
 
 ## Preview
 
-![Deadlock RPC in action](assets/preview.png)
+<div align="center">
+  <img src="assets/demo.gif" alt="Deadlock RPC in action" />
+</div>
 
 ---
 
