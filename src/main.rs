@@ -214,11 +214,12 @@ fn main() {
     let cfg = config::load();
     log!("[config] Loaded from config.toml");
 
+    let no_launch_flag = args.iter().any(|a| a == "--no-launch");
     // --no-launch CLI flag always overrides auto_launch, even if config enables it.
-    let no_launch = args.iter().any(|a| a == "--no-launch") || !cfg.general.auto_launch;
+    let no_launch = no_launch_flag || !cfg.general.auto_launch;
 
     if instance_lock.is_none() {
-        if !no_launch {
+        if !no_launch_flag {
             log!("[deadlock-rpc] Another instance is running — re-triggering launch (Steam may be updating).");
             launcher::launch_deadlock();
         } else {
