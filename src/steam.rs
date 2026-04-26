@@ -50,6 +50,28 @@ fn try_find_console_log() -> Option<PathBuf> {
 
 
 #[cfg(unix)]
+pub fn steam_exe_path() -> Option<PathBuf> {
+    // Check every directory in $PATH for a `steam` binary.
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in path_var.split(':') {
+            let candidate = PathBuf::from(dir).join("steam");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    // Fall back to known installation locations not always on $PATH.
+    let home = dirs::home_dir().unwrap_or_default();
+    let candidates = [
+        home.join(".local/share/Steam/steam.sh"),
+        home.join(".steam/steam.sh"),
+        PathBuf::from("/usr/bin/steam"),
+        PathBuf::from("/usr/local/bin/steam"),
+    ];
+    candidates.into_iter().find(|p| p.exists())
+}
+
+#[cfg(unix)]
 fn steam_vdf_locations() -> Vec<PathBuf> {
     let home = match dirs::home_dir() {
         Some(h) => h,
