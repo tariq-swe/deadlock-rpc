@@ -14,7 +14,10 @@ pub fn launch_deadlock() {
 
 #[cfg(unix)]
 fn launch_via_steam() -> std::io::Result<()> {
-    std::process::Command::new("steam")
+    let steam = crate::steam::steam_exe_path()
+        .unwrap_or_else(|| std::path::PathBuf::from("steam"));
+    log!("[launcher] Using Steam executable: {}", steam.display());
+    std::process::Command::new(steam)
         .args(["-applaunch", DEADLOCK_APP_ID, "-condebug"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
