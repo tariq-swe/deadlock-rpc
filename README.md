@@ -13,43 +13,22 @@
 
 </div>
 
-> **Not affiliated with Valve Corporation or the Deadlock development team.**
-
----
-
 ## Preview
 
 <div align="center">
   <img src="assets/demo.gif" alt="Deadlock RPC in action" />
 </div>
 
----
-
 ## Features
 
 - **Hero display** — current hero name and card image
 - **Game state tracking** — Hideout, In Queue, Match Intro, In Match, Post Match, Spectating
-- **Match mode detection** — Standard, Street Brawl, Bot Match, Training Range, and more
-- **Live elapsed timer**
-- **System tray** — runs quietly in the background with a Quit option
-- **Auto-updater** — checks for new releases on startup and prompts you to install them
+- **Match mode detection** — Standard, Street Brawl, Training Range, and more
 - **Auto-launch** — launches Deadlock with the required flag automatically
 - **Auto-exit** — closes itself when you close Deadlock
 - **Customizable** — presence text, timer, hero display, poll rate, and more via `config.toml`
 
----
-
-## How It Works
-
-Deadlock RPC launches the game with the `-condebug` flag, which causes Deadlock to write its internal console output to a log file. The app monitors this file in real time, parsing log lines to detect hero selection, map loads, phase transitions, and match mode. State changes are pushed to Discord via its IPC protocol.
-
-No game memory is read, no files are modified, and no network traffic is intercepted — the app is entirely read-only with respect to the game.
-
----
-
 ## Installation
-
-**Requirements:** Discord must be running.
 
 1. Go to the [Releases](../../releases) page
 2. Download and extract the zip for your platform:
@@ -61,17 +40,20 @@ No game memory is read, no files are modified, and no network traffic is interce
 4. A shortcut named **Deadlock RPC** is created in the extracted folder — move it to your desktop or wherever is convenient
 5. Deadlock launches with Rich Presence active
 
-From this point forward, use the **Deadlock RPC** shortcut instead of launching Deadlock directly.
+From this point forward, use the **Deadlock RPC** shortcut instead of launching Deadlock directly. Be sure to keep the executable within the extracted folder as it writes logs to the `logs/` directory.
 
-> **Recommended:** Add the Deadlock RPC executable as a non-Steam game in your Steam launcher so you can launch it directly from your library. See [Steam's guide](https://help.steampowered.com/en/faqs/view/4B8B-9697-2338-40EC) for instructions.
-
-> **Keep the extracted folder intact.** Logs are written to the `logs/` folder inside it.
+> [!TIP]
+> Add the Deadlock RPC executable as a non-Steam game in your Steam launcher so you can launch it directly from your library. See [Steam's guide](https://help.steampowered.com/en/faqs/view/4B8B-9697-2338-40EC) for instructions.
 
 ### Windows SmartScreen
 
 Windows may show a **"Windows protected your PC"** warning on first run. This is because the executable is unsigned, not because it contains malware. Click **More info → Run anyway** to proceed, or [build from source](#building-from-source) to verify the binary yourself.
 
----
+## How It Works
+
+Deadlock RPC launches the game with the `-condebug` flag, which causes Deadlock to write its internal console output to a log file. The app monitors this file in real time, parsing log lines to detect hero selection, map loads, phase transitions, and match mode. State changes are pushed to Discord via its IPC protocol.
+
+No game memory is read, no files are modified, and no network traffic is intercepted. The app is entirely read-only with respect to the game.
 
 <details>
 <summary><strong>Customization</strong></summary>
@@ -150,8 +132,6 @@ auto_exit = false
 
 </details>
 
----
-
 ## Building from Source
 
 Requires [Rust](https://rustup.rs) stable.
@@ -162,8 +142,6 @@ cd deadlock-rpc
 cargo build --release
 ./target/release/deadlock-rpc
 ```
-
----
 
 ## Disclaimer
 
