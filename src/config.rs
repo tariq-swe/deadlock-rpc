@@ -103,10 +103,10 @@ impl Default for StatusStrings {
             in_hideout: "In the Hideout".to_string(),
             in_queue: "Searching for a Match...".to_string(),
             match_intro: "{mode} \u{2022} Loading into Match".to_string(),
-            in_match: "{mode} \u{2022} Battling in {location}".to_string(),
+            in_match: "In Match: {mode}".to_string(),
             in_match_location: "the Cursed Apple".to_string(),
             post_match: "Reviewing Match Results".to_string(),
-            spectating: "Watching a Match".to_string(),
+            spectating: "Spectating a Match".to_string(),
         }
     }
 }
