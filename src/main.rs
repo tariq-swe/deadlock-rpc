@@ -21,6 +21,8 @@ use std::time::Duration;
 
 const DISCORD_APP_ID: &str = "1474302474474094634";
 
+type LastRpcState = (GamePhase, MatchMode, Option<String>, u8, Option<String>);
+
 fn connect_discord(app_id: &str) -> DiscordIpcClient {
     let mut client = DiscordIpcClient::new(app_id);
     loop {
@@ -95,7 +97,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
-    let mut last_state: Option<(GamePhase, MatchMode, Option<String>, u8, Option<String>)> = None;
+    let mut last_state: Option<LastRpcState> = None;
     let mut game_was_running = false;
 
     let rpc_start_time: i64 = std::time::SystemTime::now()
