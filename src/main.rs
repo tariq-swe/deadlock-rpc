@@ -95,15 +95,21 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
     log!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
-    let mut last_state: Option<(GamePhase, MatchMode, Option<String>, u8)> = None;
+    let mut last_state: Option<(GamePhase, MatchMode, Option<String>, u8, Option<String>)> = None;
     let mut game_was_running = false;
+
+    let rpc_start_time: i64 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
 
     let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
 
     loop {
-        let (phase, match_mode, hero_key, start_time, party_size) = {
+        let (phase, match_mode, hero_key, party_size, map_name) = {
             let gs = state.lock().unwrap();
-            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.game_start_time, gs.party_size)
+            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.party_size, gs.map_name.clone())
         };
 
         if phase != GamePhase::NotRunning {
@@ -116,7 +122,7 @@ std::process::exit(0);
             }
         }
 
-        let current = (phase, match_mode, hero_key.clone(), party_size);
+        let current = (phase, match_mode, hero_key.clone(), party_size, map_name);
         if last_state.as_ref() == Some(&current) {
             thread::sleep(update_interval);
             continue;
@@ -171,7 +177,7 @@ std::process::exit(0);
             details
         );
 
-        let elapsed_start = if cfg.presence.show_elapsed_timer { start_time } else { None };
+        let elapsed_start = if cfg.presence.show_elapsed_timer { Some(rpc_start_time) } else { None };
         let party = if show_party { Some(party_size) } else { None };
         let act = build_activity(
             details,
