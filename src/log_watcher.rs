@@ -311,11 +311,11 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         .unwrap_or(false);
 
 
-    if let Some(m) = p.map_info.captures(line) {
-        log!("[dbg] matched map_info: {:?}", m.get(1).unwrap().as_str());
-        apply_map(state, m.get(1).unwrap().as_str());
-    } else if let Some(m) = p.map_created_physics.captures(line) {
+    if let Some(m) = p.map_created_physics.captures(line) {
         log!("[dbg] matched map_created_physics: {:?}", m.get(1).unwrap().as_str());
+        apply_map(state, m.get(1).unwrap().as_str());
+    } else if let Some(m) = p.map_info.captures(line) {
+        log!("[dbg] matched map_info: {:?}", m.get(1).unwrap().as_str());
         apply_map(state, m.get(1).unwrap().as_str());
     } else if line.contains("k_EMsgClientToGCStartMatchmaking") {
         log!("[dbg] matched StartMatchmaking, phase={:?}", state.phase);
