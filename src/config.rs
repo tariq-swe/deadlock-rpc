@@ -231,13 +231,13 @@ match_intro = "{mode} • Loading into Match"
 # Available variables:
 #   {mode}     — match mode
 #   {location} — value of in_match_location below
-in_match    = "{mode} • Battling in {location}"
+in_match    = "In Match: {mode}"
 
 # The name substituted for {location} in in_match.
 in_match_location = "the Cursed Apple"
 
 post_match  = "Reviewing Match Results"
-spectating  = "Watching a Match"
+spectating  = "Spectating a Match"
 
 
 [images]
