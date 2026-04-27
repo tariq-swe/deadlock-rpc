@@ -7,7 +7,7 @@ description = "Discord Rich Presence for the Valve game Deadlock"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
 tray-icon = "0.17"
-winapi = { version = "0.3", features = ["winuser", "tlhelp32", "processthreadsapi"] }
+winapi = { version = "0.3", features = ["winuser", "tlhelp32", "processthreadsapi", "handleapi"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ksni = "0.2"
