@@ -70,7 +70,6 @@ pub struct GameState {
     pub match_mode: MatchMode,
     pub hero_key: Option<String>,
     pub map_name: Option<String>,
-    pub game_start_time: Option<i64>,
     pub party_size: u8,
     // internal tracking
     pub(crate) hero_window_open: bool,
@@ -87,7 +86,6 @@ impl GameState {
             match_mode: MatchMode::Unknown,
             hero_key: None,
             map_name: None,
-            game_start_time: None,
             party_size: 1,
             hero_window_open: true,
             hideout_loaded: false,
@@ -144,13 +142,6 @@ impl GameState {
 
     pub fn enter_main_menu(&mut self) {
         self.phase = GamePhase::MainMenu;
-        if self.game_start_time.is_none() {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            self.game_start_time = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .ok()
-                .map(|d| d.as_secs() as i64);
-        }
     }
 
     pub fn enter_queue(&mut self) {
