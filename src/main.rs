@@ -158,7 +158,7 @@ std::process::exit(0);
         let (details, state_opt): (&str, Option<&str>) = if phase == GamePhase::Hideout {
             let s = if show_party { Some("In a Party") } else { None };
             (game_status.as_str(), s)
-        } else if phase == GamePhase::NotRunning {
+        } else if phase == GamePhase::NotRunning || phase == GamePhase::Spectating {
             (game_status.as_str(), None)
         } else {
             (hero_label.as_str(), Some(game_status.as_str()))
