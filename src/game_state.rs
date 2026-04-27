@@ -70,7 +70,6 @@ pub struct GameState {
     pub match_mode: MatchMode,
     pub hero_key: Option<String>,
     pub map_name: Option<String>,
-    pub game_start_time: Option<i64>,
     pub party_size: u8,
     // internal tracking
     pub(crate) hero_window_open: bool,
@@ -78,6 +77,7 @@ pub struct GameState {
     pub(crate) local_account_id: Option<u64>,
     pub(crate) party_id: Option<u64>,
     pub(crate) party_members: HashSet<u64>,
+    pub(crate) pending_player_count: u32,
 }
 
 impl GameState {
@@ -87,13 +87,13 @@ impl GameState {
             match_mode: MatchMode::Unknown,
             hero_key: None,
             map_name: None,
-            game_start_time: None,
             party_size: 1,
             hero_window_open: true,
             hideout_loaded: false,
             local_account_id: None,
             party_id: None,
             party_members: HashSet::new(),
+            pending_player_count: 0,
         }
     }
 
@@ -144,13 +144,6 @@ impl GameState {
 
     pub fn enter_main_menu(&mut self) {
         self.phase = GamePhase::MainMenu;
-        if self.game_start_time.is_none() {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            self.game_start_time = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .ok()
-                .map(|d| d.as_secs() as i64);
-        }
     }
 
     pub fn enter_queue(&mut self) {
@@ -166,6 +159,7 @@ impl GameState {
         self.match_mode = MatchMode::Unknown;
         self.hero_key = None;
         self.hero_window_open = true;
+        self.pending_player_count = 0;
     }
 
     pub fn start_match(&mut self) {
@@ -227,16 +221,6 @@ impl GameState {
         }
     }
 
-    /// Authoritatively set the hero from a client-side signal (e.g. VMDL camera pose).
-    /// Bypasses the match lock-in so this always wins over server-side signals.
-    pub fn set_hero_from_client(&mut self, hero_key: &str) {
-        if self.phase == GamePhase::Spectating {
-            return;
-        }
-        self.hero_key = Some(hero_key.to_string());
-        self.hero_window_open = false;
-    }
-
     pub fn apply_hero_signal(&mut self, hero_key: &str) {
         if self.phase == GamePhase::Spectating {
             return;
@@ -244,12 +228,15 @@ impl GameState {
 
         match self.phase {
             GamePhase::MatchIntro | GamePhase::InMatch => {
-                if let Some(ref current) = self.hero_key {
-                    if hero_key != current.as_str() {
-                        return; // hero locked in, ignore a different hero
+                let free_swap = matches!(self.match_mode, MatchMode::TrainingRange | MatchMode::HeroLabs);
+                if !free_swap {
+                    if let Some(ref current) = self.hero_key {
+                        if hero_key != current.as_str() {
+                            return; // hero locked in, ignore a different hero
+                        }
+                    } else if !self.hero_window_open {
+                        return;
                     }
-                } else if !self.hero_window_open {
-                    return;
                 }
                 self.hero_key = Some(hero_key.to_string());
                 self.hero_window_open = false;
