@@ -230,6 +230,24 @@ fn normalize_hero_key(raw: &str) -> String {
     if s.starts_with("hero_") { s } else { format!("hero_{s}") }
 }
 
+/// Finalise match mode once we have both a map name and a stable player count.
+/// Only acts when mode is still Unknown — safe to call multiple times.
+fn try_infer_mode(state: &mut GameState) {
+    if state.match_mode != MatchMode::Unknown || state.pending_player_count == 0 {
+        return;
+    }
+    if state.map_name.as_deref() == Some("dl_midtown") {
+        state.match_mode = if state.pending_player_count >= 9 {
+            MatchMode::Standard
+        } else if state.pending_player_count >= 4 {
+            MatchMode::StreetBrawl
+        } else {
+            return; // too few players to determine mode yet
+        };
+        log!("[mode] inferred {:?} from dl_midtown + {} players", state.match_mode, state.pending_player_count);
+    }
+}
+
 fn apply_map(state: &mut GameState, map_name: &str) {
     if state.phase == GamePhase::Spectating {
         return;
@@ -248,6 +266,9 @@ fn apply_map(state: &mut GameState, map_name: &str) {
 
     state.map_name = Some(map_lower.clone());
 
+    // Reset mode on every map change so it gets re-derived for the new map.
+    state.match_mode = MatchMode::Unknown;
+
     // Set mode from map name where it's unambiguous
     match map_lower.as_str() {
         "new_player_basics" => state.match_mode = MatchMode::TrainingRange,
@@ -255,14 +276,21 @@ fn apply_map(state: &mut GameState, map_name: &str) {
         _ => {}
     }
 
-    // Any non-hideout named map means a match is loading
+    // Any non-hideout named map means a match is starting/restarting.
     if matches!(
         state.phase,
-        GamePhase::MatchIntro | GamePhase::InQueue | GamePhase::MainMenu | GamePhase::Hideout
+        GamePhase::MatchIntro
+            | GamePhase::InQueue
+            | GamePhase::MainMenu
+            | GamePhase::Hideout
+            | GamePhase::InMatch
+            | GamePhase::PostMatch
     ) {
         state.phase = GamePhase::InMatch;
         state.prepare_match_hero_tracking();
         state.hideout_loaded = false;
+        // Handle the case where player_info arrived before map_created_physics.
+        try_infer_mode(state);
     }
 }
 
@@ -509,21 +537,15 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.hideout_loaded = false;
         }
     } else if let Some(m) = p.player_info.captures(line) {
-        if matches!(
-            state.phase,
-            GamePhase::MatchIntro | GamePhase::InMatch
-        ) {
-            let player_count: u32 = m.get(1).unwrap().as_str().parse::<u32>().unwrap_or(0);
-            log!("[dbg] matched player_info: count={player_count} mode={:?}", state.match_mode);
-            if player_count >= 9 {
-                if matches!(state.match_mode, MatchMode::Unknown | MatchMode::BotMatch) {
-                    state.match_mode = MatchMode::Standard;
-                }
-            } else if state.phase == GamePhase::InMatch
-                && player_count >= 2
-                && state.match_mode == MatchMode::Unknown
-            {
-                state.match_mode = MatchMode::StreetBrawl;
+        if matches!(state.phase, GamePhase::MatchIntro | GamePhase::InMatch) {
+            let count: u32 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
+            log!("[dbg] matched player_info: count={count} pending={} mode={:?}", state.pending_player_count, state.match_mode);
+            if count > 0 {
+                state.pending_player_count = state.pending_player_count.max(count);
+            }
+            // Only finalise mode once the match is actually in progress.
+            if state.phase == GamePhase::InMatch {
+                try_infer_mode(state);
             }
         }
     } else if p.bot_init.is_match(line)

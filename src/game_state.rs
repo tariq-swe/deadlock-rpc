@@ -77,6 +77,7 @@ pub struct GameState {
     pub(crate) local_account_id: Option<u64>,
     pub(crate) party_id: Option<u64>,
     pub(crate) party_members: HashSet<u64>,
+    pub(crate) pending_player_count: u32,
 }
 
 impl GameState {
@@ -92,6 +93,7 @@ impl GameState {
             local_account_id: None,
             party_id: None,
             party_members: HashSet::new(),
+            pending_player_count: 0,
         }
     }
 
@@ -157,6 +159,7 @@ impl GameState {
         self.match_mode = MatchMode::Unknown;
         self.hero_key = None;
         self.hero_window_open = true;
+        self.pending_player_count = 0;
     }
 
     pub fn start_match(&mut self) {
