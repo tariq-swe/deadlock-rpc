@@ -1,4 +1,4 @@
-use crate::log;
+use log::{debug, info, warn};
 use std::io::{Cursor, Read};
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -72,28 +72,28 @@ fn notify(_body: &str) {}
 #[cfg(debug_assertions)]
 pub fn simulate_update() {
     const FAKE_VERSION: &str = "99.9.9";
-    log!("[updater] [debug] Simulating update to v{FAKE_VERSION}");
+    debug!("[updater] Simulating update to v{FAKE_VERSION}");
 
     #[cfg(unix)]
     if !prompt_update_linux(FAKE_VERSION) {
-        log!("[updater] [debug] User skipped simulated update");
+        debug!("[updater] User skipped simulated update");
         return;
     }
     #[cfg(windows)]
     if !prompt_update_windows(FAKE_VERSION) {
-        log!("[updater] [debug] User skipped simulated update");
+        debug!("[updater] User skipped simulated update");
         return;
     }
 
-    log!("[updater] [debug] Simulating download (3s)...");
+    debug!("[updater] Simulating download (3s)...");
     notify("Downloading and installing update, launching shortly...");
     std::thread::sleep(std::time::Duration::from_secs(3));
-    log!("[updater] [debug] Simulated download complete, restarting...");
+    debug!("[updater] Simulated download complete, restarting...");
 
     let exe_path = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
-            log!("[updater] [debug] Failed to get exe path: {e}");
+            debug!("[updater] Failed to get exe path: {e}");
             return;
         }
     };
@@ -106,7 +106,7 @@ pub fn simulate_update() {
     {
         use std::os::unix::process::CommandExt;
         let err = std::process::Command::new(&exe_path).args(&args).exec();
-        log!("[updater] [debug] exec failed: {err}");
+        debug!("[updater] exec failed: {err}");
     }
     #[cfg(windows)]
     {
@@ -121,13 +121,13 @@ pub fn simulate_update() {
 /// Any error is logged and startup continues normally.
 pub fn check_on_startup() {
     if let Err(e) = try_check() {
-        log!("[updater] Check failed: {e}");
+        warn!("[updater] Check failed: {e}");
         notify("Update failed — check logs for details.");
     }
 }
 
 fn try_check() -> Result<(), Box<dyn std::error::Error>> {
-    log!("[updater] Checking for updates (current: v{CURRENT_VERSION})");
+    info!("[updater] Checking for updates (current: v{CURRENT_VERSION})");
 
     let client = reqwest::blocking::Client::builder()
         .user_agent(concat!("deadlock-rpc/", env!("CARGO_PKG_VERSION")))
@@ -135,23 +135,23 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let release: Release = client.get(RELEASES_API).send()?.json()?;
-    log!("[updater] Latest release: {}", release.tag_name);
+    info!("[updater] Latest release: {}", release.tag_name);
 
     if !is_newer(&release.tag_name) {
-        log!("[updater] Already on latest version");
+        info!("[updater] Already on latest version");
         return Ok(());
     }
 
     // Ask the user before downloading anything.
     #[cfg(unix)]
     if !prompt_update_linux(release.tag_name.trim_start_matches('v')) {
-        log!("[updater] User skipped update");
+        info!("[updater] User skipped update");
         return Ok(());
     }
 
     #[cfg(windows)]
     if !prompt_update_windows(release.tag_name.trim_start_matches('v')) {
-        log!("[updater] User skipped update");
+        info!("[updater] User skipped update");
         return Ok(());
     }
 
@@ -161,14 +161,14 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
         .find(|a| a.name == asset_name())
         .ok_or("release asset not found for this platform")?;
 
-    log!("[updater] Downloading {}", asset.browser_download_url);
+    info!("[updater] Downloading {}", asset.browser_download_url);
     notify("Downloading and installing update, launching shortly...");
 
     let zip_bytes = client.get(&asset.browser_download_url).send()?.bytes()?;
-    log!("[updater] Downloaded {} bytes, extracting...", zip_bytes.len());
+    info!("[updater] Downloaded {} bytes, extracting...", zip_bytes.len());
 
     let new_binary = extract_binary(&zip_bytes)?;
-    log!("[updater] Extracted binary ({} bytes), writing to disk...", new_binary.len());
+    info!("[updater] Extracted binary ({} bytes), writing to disk...", new_binary.len());
 
     let exe_path = std::env::current_exe()?;
 
@@ -294,7 +294,7 @@ fn apply_update(
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
     std::fs::rename(&tmp, exe_path)?;
 
-    log!("[updater] Binary replaced, restarting via exec...");
+    info!("[updater] Binary replaced, restarting via exec...");
 
     // exec() replaces the current process image with the new binary.
     // Because we haven't acquired the single-instance port yet, the new
@@ -333,6 +333,6 @@ fn apply_update(
         ])
         .spawn()?;
 
-    log!("[updater] Binary staged, PowerShell swap in progress — exiting");
+    info!("[updater] Binary staged, PowerShell swap in progress — exiting");
     std::process::exit(0);
 }

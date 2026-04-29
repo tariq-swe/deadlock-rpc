@@ -1,5 +1,5 @@
 use crate::game_state::{GamePhase, GameState, MatchMode};
-use crate::log;
+use log::{debug, info, warn};
 use regex::Regex;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
@@ -92,7 +92,7 @@ impl LogWatcher {
         loop {
             if !self.log_path.exists() {
                 if initialized {
-                    log!("[watcher] Log file gone — game closed, resetting state");
+                    info!("[watcher] Log file gone — game closed, resetting state");
                     let mut gs = state.lock().unwrap();
                     gs.reset();
                     initialized = false;
@@ -115,7 +115,7 @@ impl LogWatcher {
                 for line in &lines {
                     process_line(line.trim(), &mut gs, &patterns);
                 }
-                log!(
+                info!(
                     "[resync] phase={:?} map={:?} mode={:?} hero={:?} party={} ({} lines)",
                     gs.phase, gs.map_name, gs.match_mode, gs.hero_key, gs.party_size, lines.len()
                 );
@@ -127,7 +127,7 @@ impl LogWatcher {
             }
 
             if file_size < last_pos {
-                log!("[watcher] Log truncated, resyncing...");
+                warn!("[watcher] Log truncated, resyncing...");
                 initialized = false;
                 last_pos = 0;
                 continue;
@@ -149,13 +149,13 @@ impl LogWatcher {
                         }
                     }
                     if gs.phase != prev_phase {
-                        log!("[state] {:?} → {:?}", prev_phase, gs.phase);
+                        info!("[state] {:?} → {:?}", prev_phase, gs.phase);
                     }
                     if gs.hero_key != prev_hero {
-                        log!("[hero]  {:?} → {:?}", prev_hero, gs.hero_key);
+                        info!("[hero]  {:?} → {:?}", prev_hero, gs.hero_key);
                     }
                     if gs.party_size != prev_party {
-                        log!("[party] {} → {}", prev_party, gs.party_size);
+                        info!("[party] {} → {}", prev_party, gs.party_size);
                     }
                 }
 
@@ -172,7 +172,7 @@ impl LogWatcher {
                 if in_active_match
                     && last_activity.elapsed() > Duration::from_secs(MATCH_STALE_SECS)
                 {
-                    log!(
+                    warn!(
                         "[watcher] No log activity for {}s during active match — assuming crash",
                         MATCH_STALE_SECS
                     );
@@ -244,7 +244,7 @@ fn try_infer_mode(state: &mut GameState) {
         } else {
             return; // too few players to determine mode yet
         };
-        log!("[mode] inferred {:?} from dl_midtown + {} players", state.match_mode, state.pending_player_count);
+        info!("[mode] inferred {:?} from dl_midtown + {} players", state.match_mode, state.pending_player_count);
     }
 }
 
@@ -308,59 +308,59 @@ fn log_last_instances(lines: &[String], p: &Patterns) {
 
         if !found_map {
             if let Some(m) = p.map_created_physics.captures(line) {
-                log!("[startup] last map:   {:?} (map_created_physics)", m.get(1).unwrap().as_str());
+                info!("[startup] last map:   {:?} (map_created_physics)", m.get(1).unwrap().as_str());
                 found_map = true;
             } else if let Some(m) = p.map_info.captures(line) {
-                log!("[startup] last map:   {:?} (map_info)", m.get(1).unwrap().as_str());
+                info!("[startup] last map:   {:?} (map_info)", m.get(1).unwrap().as_str());
                 found_map = true;
             }
         }
 
         if !found_phase {
             if let Some(m) = p.change_game_state.captures(line) {
-                log!(
+                info!(
                     "[startup] last phase: ChangeGameState {} ({})",
                     m.get(1).unwrap().as_str(),
                     m.get(2).unwrap().as_str()
                 );
                 found_phase = true;
             } else if p.lobby_created.is_match(line) {
-                log!("[startup] last phase: lobby created");
+                info!("[startup] last phase: lobby created");
                 found_phase = true;
             } else if p.lobby_destroyed.is_match(line) {
-                log!("[startup] last phase: lobby destroyed");
+                info!("[startup] last phase: lobby destroyed");
                 found_phase = true;
             } else if p.spectate_broadcast.is_match(line) {
-                log!("[startup] last phase: spectate broadcast");
+                info!("[startup] last phase: spectate broadcast");
                 found_phase = true;
             } else if line.contains("k_EMsgClientToGCStartMatchmaking") {
-                log!("[startup] last phase: StartMatchmaking");
+                info!("[startup] last phase: StartMatchmaking");
                 found_phase = true;
             } else if line.contains("k_EMsgClientToGCStopMatchmaking") {
-                log!("[startup] last phase: StopMatchmaking");
+                info!("[startup] last phase: StopMatchmaking");
                 found_phase = true;
             }
         }
 
         if !found_mode {
             if let Some(m) = p.player_info.captures(line) {
-                log!("[startup] last mode:  {} players (player_info)", m.get(1).unwrap().as_str());
+                info!("[startup] last mode:  {} players (player_info)", m.get(1).unwrap().as_str());
                 found_mode = true;
             } else if p.bot_init.is_match(line) {
-                log!("[startup] last mode:  bot match init");
+                info!("[startup] last mode:  bot match init");
                 found_mode = true;
             }
         }
 
         if !found_hero {
             if let Some(m) = p.loaded_hero.captures(line) {
-                log!(
+                info!(
                     "[startup] last hero:  {:?} (server loaded_hero)",
                     normalize_hero_key(m.get(1).unwrap().as_str())
                 );
                 found_hero = true;
             } else if let Some(m) = p.client_hero_vmdl.captures(line) {
-                log!(
+                info!(
                     "[startup] last hero:  {:?} (client vmdl)",
                     normalize_hero_key(m.get(1).unwrap().as_str())
                 );
@@ -373,10 +373,10 @@ fn log_last_instances(lines: &[String], p: &Patterns) {
         }
     }
 
-    if !found_map   { log!("[startup] last map:   none"); }
-    if !found_phase { log!("[startup] last phase: none"); }
-    if !found_mode  { log!("[startup] last mode:  none"); }
-    if !found_hero  { log!("[startup] last hero:  none"); }
+    if !found_map   { info!("[startup] last map:   none"); }
+    if !found_phase { info!("[startup] last phase: none"); }
+    if !found_mode  { info!("[startup] last mode:  none"); }
+    if !found_hero  { info!("[startup] last hero:  none"); }
 }
 
 fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
@@ -388,6 +388,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         if let Some(m) = p.local_account_id.captures(line) {
             let id: u64 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
             if id > 0 {
+                debug!("[dbg] captured local_account_id: {}", id);
                 state.local_account_id = Some(id);
             }
         }
@@ -411,16 +412,16 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
 
 
     if let Some(m) = p.map_created_physics.captures(line) {
-        log!("[dbg] matched map_created_physics: {:?}", m.get(1).unwrap().as_str());
+        debug!("[dbg] matched map_created_physics: {:?}", m.get(1).unwrap().as_str());
         apply_map(state, m.get(1).unwrap().as_str());
     } else if let Some(m) = p.map_info.captures(line) {
         let map = m.get(1).unwrap().as_str();
-        log!("[dbg] matched map_info: {:?}", map);
+        debug!("[dbg] matched map_info: {:?}", map);
         if map != "start" {
             apply_map(state, map);
         }
     } else if line.contains("k_EMsgClientToGCStartMatchmaking") {
-        log!("[dbg] matched StartMatchmaking, phase={:?}", state.phase);
+        debug!("[dbg] matched StartMatchmaking, phase={:?}", state.phase);
         if matches!(
             state.phase,
             GamePhase::Hideout | GamePhase::MainMenu
@@ -428,12 +429,12 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.enter_queue();
         }
     } else if line.contains("k_EMsgClientToGCStopMatchmaking") {
-        log!("[dbg] matched StopMatchmaking, phase={:?}", state.phase);
+        debug!("[dbg] matched StopMatchmaking, phase={:?}", state.phase);
         if state.phase == GamePhase::InQueue {
             state.leave_queue();
         }
     } else if p.lobby_created.is_match(line) {
-        log!("[dbg] matched lobby_created, phase={:?}", state.phase);
+        debug!("[dbg] matched lobby_created, phase={:?}", state.phase);
         state.prepare_match_hero_tracking();
         if matches!(
             state.phase,
@@ -442,16 +443,16 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.enter_match_intro();
         }
     } else if p.lobby_destroyed.is_match(line) {
-        log!("[dbg] matched lobby_destroyed");
+        debug!("[dbg] matched lobby_destroyed");
         state.end_match();
     } else if p.spectate_broadcast.is_match(line) {
-        log!("[dbg] matched spectate_broadcast");
+        debug!("[dbg] matched spectate_broadcast");
         state.enter_spectating();
         state.hideout_loaded = false;
     } else if let Some(m) = p.server_connect.captures(line) {
         let addr = m.get(1).unwrap().as_str();
         let is_real = !addr.to_lowercase().contains("loopback");
-        log!("[dbg] matched server_connect: addr={addr:?} is_real={is_real}");
+        debug!("[dbg] matched server_connect: addr={addr:?} is_real={is_real}");
         if is_real {
             state.prepare_match_hero_tracking();
             if matches!(
@@ -464,17 +465,17 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
     } else if let Some(m) = p.loaded_hero.captures(line) {
         let hero = normalize_hero_key(m.get(1).unwrap().as_str());
         let is_hideout = matches!(state.phase, GamePhase::Hideout);
-        log!("[dbg] matched loaded_hero: hero={hero:?} is_hideout={is_hideout} hideout_loaded={}", state.hideout_loaded);
+        debug!("[dbg] matched loaded_hero: hero={hero:?} is_hideout={is_hideout} hideout_loaded={}", state.hideout_loaded);
         if !is_hideout || state.hideout_loaded {
             state.apply_hero_signal(&hero);
         }
     } else if let Some(m) = p.client_hero_vmdl.captures(line) {
         let hero = normalize_hero_key(m.get(1).unwrap().as_str());
-        log!("[dbg] matched client_hero_vmdl: hero={hero:?}");
+        debug!("[dbg] matched client_hero_vmdl: hero={hero:?}");
         state.apply_hero_signal(&hero);
     } else if let Some(m) = p.server_disconnect.captures(line) {
         let reason = m.get(1).unwrap().as_str().to_uppercase();
-        log!("[dbg] matched server_disconnect: reason={reason:?}");
+        debug!("[dbg] matched server_disconnect: reason={reason:?}");
         if reason.contains("EXITING") {
             state.reset();
         } else if !reason.contains("LOOPDEACTIVATE")
@@ -486,7 +487,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
             state.end_match();
         }
     } else if p.loop_mode_menu.is_match(line) {
-        log!("[dbg] matched loop_mode_menu, phase={:?}", state.phase);
+        debug!("[dbg] matched loop_mode_menu, phase={:?}", state.phase);
         if matches!(
             state.phase,
             GamePhase::InMatch | GamePhase::MatchIntro | GamePhase::Spectating
@@ -496,7 +497,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
     } else if let Some(m) = p.change_game_state.captures(line) {
         let state_name = m.get(1).unwrap().as_str().to_lowercase();
         let state_id: u32 = m.get(2).unwrap().as_str().parse().unwrap_or(0);
-        log!("[dbg] matched change_game_state: name={state_name:?} id={state_id} phase={:?} is_hideout_map={is_hideout_map}", state.phase);
+        debug!("[dbg] matched change_game_state: name={state_name:?} id={state_id} phase={:?} is_hideout_map={is_hideout_map}", state.phase);
         if state.phase != GamePhase::Spectating && !is_hideout_map && !state.hideout_loaded {
             if state_name == "matchintro" || state_id == 4 {
                 state.enter_match_intro();
@@ -517,29 +518,29 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         }
     } else if let Some(m) = p.host_activate.captures(line) {
         let map_name = m.get(1).unwrap().as_str().to_lowercase();
-        log!("[dbg] matched host_activate: map={map_name:?}");
+        debug!("[dbg] matched host_activate: map={map_name:?}");
         if HIDEOUT_MAPS.contains(&map_name.as_str()) {
             state.hideout_loaded = true;
         }
     } else if let Some(m) = p.server_shutdown.captures(line) {
         let reason = m.get(1).unwrap().as_str().to_uppercase();
-        log!("[dbg] matched server_shutdown: reason={reason:?}");
+        debug!("[dbg] matched server_shutdown: reason={reason:?}");
         if reason.contains("EXITING") {
             state.reset();
         }
     } else if line.contains("Dispatching EventAppShutdown_t") || line.contains("Source2Shutdown") {
-        log!("[dbg] matched app shutdown signal");
+        debug!("[dbg] matched app shutdown signal");
         state.reset();
     } else if let Some(m) = p.precaching_heroes.captures(line) {
         let count: u32 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
-        log!("[dbg] matched precaching_heroes: count={count}");
+        debug!("[dbg] matched precaching_heroes: count={count}");
         if count > 0 {
             state.hideout_loaded = false;
         }
     } else if let Some(m) = p.player_info.captures(line) {
         if matches!(state.phase, GamePhase::MatchIntro | GamePhase::InMatch) {
             let count: u32 = m.get(1).unwrap().as_str().parse().unwrap_or(0);
-            log!("[dbg] matched player_info: count={count} pending={} mode={:?}", state.pending_player_count, state.match_mode);
+            debug!("[dbg] matched player_info: count={count} pending={} mode={:?}", state.pending_player_count, state.match_mode);
             if count > 0 {
                 state.pending_player_count = state.pending_player_count.max(count);
             }
@@ -553,7 +554,7 @@ fn process_line(line: &str, state: &mut GameState, p: &Patterns) {
         && matches!(state.phase, GamePhase::MatchIntro | GamePhase::InMatch)
         && state.match_mode == MatchMode::Unknown
     {
-        log!("[dbg] matched bot_init");
+        debug!("[dbg] matched bot_init");
         state.match_mode = MatchMode::BotMatch;
     }
 }

@@ -1,5 +1,5 @@
 use crate::game_state::GameState;
-use crate::log;
+use log::info;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -14,9 +14,9 @@ impl ProcessWatcher {
         loop {
             let alive = is_deadlock_running();
             if alive && !was_alive {
-                log!("[process] Deadlock process detected");
+                info!("[process] Deadlock process detected");
             } else if !alive && was_alive {
-                log!("[process] Deadlock process gone — resetting state");
+                info!("[process] Deadlock process gone — resetting state");
                 state.lock().unwrap().reset();
             }
             was_alive = alive;
