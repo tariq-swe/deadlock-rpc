@@ -14,6 +14,7 @@ mod updater;
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use game_state::{GamePhase, GameState, MatchMode};
 use hero_api::{HeroCache, HeroData};
+use log::{info, warn};
 use log_watcher::LogWatcher;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -21,18 +22,18 @@ use std::time::Duration;
 
 const DISCORD_APP_ID: &str = "1474302474474094634";
 
-type LastRpcState = (GamePhase, MatchMode, Option<String>, u8, Option<String>);
+type LastRpcState = (GamePhase, MatchMode, Option<String>, u8, Option<String>, Option<u64>);
 
 fn connect_discord(app_id: &str) -> DiscordIpcClient {
     let mut client = DiscordIpcClient::new(app_id);
     loop {
         match client.connect() {
             Ok(_) => {
-                log!("[discord] Connected!");
+                info!("[discord] Connected!");
                 return client;
             }
             Err(e) => {
-                log!("[discord] Connect failed: {e}. Retrying in 10s...");
+                warn!("[discord] Connect failed: {e}. Retrying in 10s...");
                 thread::sleep(Duration::from_secs(10));
             }
         }
@@ -46,6 +47,8 @@ fn build_activity<'a>(
     start_time: Option<i64>,
     party_size: Option<u8>,
     img_cfg: &'a config::ImagesConfig,
+    account_id: Option<u64>,
+    show_statlocker_button: bool,
 ) -> activity::Activity<'a> {
     let large_image = hero_data
         .filter(|d| !d.icon_url.is_empty())
@@ -78,6 +81,13 @@ fn build_activity<'a>(
         act = act.party(activity::Party::new().size([size as i32, 6]));
     }
 
+    if show_statlocker_button {
+        if let Some(id) = account_id {
+            let url = format!("https://statlocker.gg/profile/{}/matches", id);
+            act = act.buttons(vec![activity::Button::new("View on Statlocker", url)]);
+        }
+    }
+
     act
 }
 
@@ -94,7 +104,7 @@ fn exit_discord(client: &mut DiscordIpcClient) {
 }
 
 fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
-    log!("[discord] Connecting...");
+    info!("[discord] Connecting...");
     let mut client = connect_discord(DISCORD_APP_ID);
     let mut hero_cache = HeroCache::new();
     let mut last_state: Option<LastRpcState> = None;
@@ -109,22 +119,22 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
     let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
 
     loop {
-        let (phase, match_mode, hero_key, party_size, map_name) = {
+        let (phase, match_mode, hero_key, party_size, map_name, account_id) = {
             let gs = state.lock().unwrap();
-            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.party_size, gs.map_name.clone())
+            (gs.phase, gs.match_mode, gs.hero_key.clone(), gs.party_size, gs.map_name.clone(), gs.local_account_id)
         };
 
         if phase != GamePhase::NotRunning {
             game_was_running = true;
         } else if game_was_running {
-            log!("[deadlock-rpc] Game closed.");
+            info!("[deadlock-rpc] Game closed.");
             if cfg.general.auto_exit {
                 exit_discord(&mut client);
 std::process::exit(0);
             }
         }
 
-        let current = (phase, match_mode, hero_key.clone(), party_size, map_name);
+        let current = (phase, match_mode, hero_key.clone(), party_size, map_name, account_id);
         if last_state.as_ref() == Some(&current) {
             thread::sleep(update_interval);
             continue;
@@ -172,11 +182,19 @@ std::process::exit(0);
             (hero_label.as_str(), Some(game_status.as_str()))
         };
 
-        log!(
-            "[rpc] phase={:?} hero={} details=\"{}\"",
+        info!(
+            "[rpc] {{\n  \"phase\": \"{:?}\",\n  \"hero\": \"{}\",\n  \"details\": \"{}\",\n  \"state\": \"{}\",\n  \"party_size\": {},\n  \"account_id\": {},\n  \"statlocker_button\": \"{}\"\n}}",
             phase,
             hero_key.as_deref().unwrap_or("none"),
-            details
+            details,
+            state_opt.unwrap_or("none"),
+            party_size,
+            account_id.map_or("null".to_string(), |id| id.to_string()),
+            if cfg.presence.show_statlocker_button {
+                if account_id.is_some() { "enabled" } else { "enabled (awaiting Steam ID)" }
+            } else {
+                "disabled"
+            }
         );
 
         let elapsed_start = if cfg.presence.show_elapsed_timer { Some(rpc_start_time) } else { None };
@@ -188,6 +206,8 @@ std::process::exit(0);
             elapsed_start,
             party,
             &cfg.images,
+            account_id,
+            cfg.presence.show_statlocker_button,
         );
 
         match client.set_activity(act) {
@@ -195,7 +215,7 @@ std::process::exit(0);
                 last_state = Some(current);
             }
             Err(e) => {
-                log!("[rpc] set_activity error: {e}. Reconnecting...");
+                warn!("[rpc] set_activity error: {e}. Reconnecting...");
                 let _ = client.reconnect();
             }
         }
@@ -206,6 +226,8 @@ std::process::exit(0);
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+
+    logger::init();
 
     // Debug-only: --simulate-update fakes the full update flow then re-execs.
     #[cfg(debug_assertions)]
@@ -220,10 +242,8 @@ fn main() {
 
     let instance_lock = try_acquire_single_instance_lock();
 
-    logger::init();
-
     let cfg = config::load();
-    log!("[config] Loaded from config.toml");
+    info!("[config] Loaded from config.toml");
 
     let no_launch_flag = args.iter().any(|a| a == "--no-launch");
     // --no-launch CLI flag always overrides auto_launch, even if config enables it.
@@ -231,10 +251,10 @@ fn main() {
 
     if instance_lock.is_none() {
         if !no_launch_flag {
-            log!("[deadlock-rpc] Another instance is running — re-triggering launch (Steam may be updating).");
+            info!("[deadlock-rpc] Another instance is running — re-triggering launch (Steam may be updating).");
             launcher::launch_deadlock();
         } else {
-            log!("[deadlock-rpc] Another instance is already running. Exiting.");
+            info!("[deadlock-rpc] Another instance is already running. Exiting.");
         }
         std::process::exit(0);
     }
@@ -249,7 +269,7 @@ fn main() {
     }
 
     let log_path = steam::find_console_log();
-    log!("[deadlock-rpc] Monitoring: {}", log_path.display());
+    info!("[deadlock-rpc] Monitoring: {}", log_path.display());
 
     let state = Arc::new(Mutex::new(GameState::new()));
 
