@@ -40,6 +40,11 @@ fn connect_discord(app_id: &str) -> DiscordIpcClient {
     }
 }
 
+struct StatlockerOpts {
+    account_id: Option<u64>,
+    show_button: bool,
+}
+
 fn build_activity<'a>(
     details: &'a str,
     hero_data: Option<&'a HeroData>,
@@ -47,8 +52,7 @@ fn build_activity<'a>(
     start_time: Option<i64>,
     party_size: Option<u8>,
     img_cfg: &'a config::ImagesConfig,
-    account_id: Option<u64>,
-    show_statlocker_button: bool,
+    statlocker: StatlockerOpts,
 ) -> activity::Activity<'a> {
     let large_image = hero_data
         .filter(|d| !d.icon_url.is_empty())
@@ -81,8 +85,8 @@ fn build_activity<'a>(
         act = act.party(activity::Party::new().size([size as i32, 6]));
     }
 
-    if show_statlocker_button {
-        if let Some(id) = account_id {
+    if statlocker.show_button {
+        if let Some(id) = statlocker.account_id {
             let url = format!("https://statlocker.gg/profile/{}/matches", id);
             act = act.buttons(vec![activity::Button::new("View on Statlocker", url)]);
         }
@@ -206,8 +210,7 @@ std::process::exit(0);
             elapsed_start,
             party,
             &cfg.images,
-            account_id,
-            cfg.presence.show_statlocker_button,
+            StatlockerOpts { account_id, show_button: cfg.presence.show_statlocker_button },
         );
 
         match client.set_activity(act) {
