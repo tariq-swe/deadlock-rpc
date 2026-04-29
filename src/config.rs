@@ -31,6 +31,9 @@ pub struct PresenceConfig {
     /// Show the hero icon and "Playing as" text.
     /// When false, the Deadlock logo is always shown.
     pub show_hero: bool,
+    /// Show a "View on Statlocker" button linking to the user's match history.
+    /// Requires the Steam ID to be detected from the game log first.
+    pub show_statlocker_button: bool,
     /// Top "details" line when a hero is known.
     /// Variables: {hero}
     pub details_with_hero: String,
@@ -88,6 +91,7 @@ impl Default for PresenceConfig {
         Self {
             show_elapsed_timer: true,
             show_hero: true,
+            show_statlocker_button: false,
             details_with_hero: "Playing as {hero}".to_string(),
             details_no_hero: "{phase}".to_string(),
             status: StatusStrings::default(),
@@ -150,21 +154,21 @@ pub fn load() -> Config {
 
     if !path.exists() {
         match std::fs::write(&path, DEFAULT_TOML) {
-            Ok(_) => crate::log!("[config] Created default config.toml at {}", path.display()),
-            Err(e) => crate::log!("[config] Could not write default config.toml: {e}"),
+            Ok(_) => log::info!("[config] Created default config.toml at {}", path.display()),
+            Err(e) => log::warn!("[config] Could not write default config.toml: {e}"),
         }
         return Config::default();
     }
 
     match std::fs::read_to_string(&path) {
         Err(e) => {
-            crate::log!("[config] Could not read config.toml: {e} — using defaults");
+            log::warn!("[config] Could not read config.toml: {e} — using defaults");
             Config::default()
         }
         Ok(text) => match toml::from_str::<Config>(&text) {
             Ok(cfg) => cfg,
             Err(e) => {
-                crate::log!("[config] config.toml parse error: {e} — using defaults");
+                log::warn!("[config] config.toml parse error: {e} — using defaults");
                 Config::default()
             }
         },
@@ -199,6 +203,11 @@ show_elapsed_timer = true
 # Show the current hero's image and name.
 # Set to false to always display the Deadlock logo instead.
 show_hero = true
+
+# Show a clickable "View on Statlocker" button on your presence card linking
+# to your match history on statlocker.gg. Only visible to other Discord users,
+# not to yourself. Requires your Steam ID to be detected from the game log.
+show_statlocker_button = false
 
 # The top "details" line in the presence card when a hero is known.
 # Available variables:

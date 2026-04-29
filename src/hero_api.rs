@@ -1,4 +1,4 @@
-use crate::log;
+use log::{debug, info, warn};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -38,11 +38,11 @@ impl HeroCache {
             Entry::Occupied(e) => Some(e.into_mut()),
             Entry::Vacant(e) => match fetch(hero_key) {
                 Ok(data) => {
-                    log!("[api] Cached: {} → \"{}\"", hero_key, data.name);
+                    info!("[api] Cached: {} → \"{}\"", hero_key, data.name);
                     Some(e.insert(data))
                 }
                 Err(err) => {
-                    log!("[api] Failed to fetch {hero_key}: {err}");
+                    warn!("[api] Failed to fetch {hero_key}: {err}");
                     None
                 }
             },
@@ -51,23 +51,23 @@ impl HeroCache {
 }
 
 fn fetch(hero_key: &str) -> Result<HeroData, Box<dyn std::error::Error>> {
-    log!("[api] Fetching: {hero_key}");
+    debug!("[api] Fetching: {hero_key}");
 
     if let Ok(data) = fetch_by_name(hero_key) {
-        log!("[api] Resolved via full key: {hero_key}");
+        debug!("[api] Resolved via full key: {hero_key}");
         return Ok(data);
     }
 
     let stripped = hero_key.trim_start_matches("hero_");
     if let Ok(data) = fetch_by_name(stripped) {
-        log!("[api] Resolved via stripped key: {stripped}");
+        debug!("[api] Resolved via stripped key: {stripped}");
         return Ok(data);
     }
 
     if let Some(display_name) = dict_lookup(hero_key) {
-        log!("[api] Dict fallback: {hero_key} → \"{display_name}\"");
+        debug!("[api] Dict fallback: {hero_key} → \"{display_name}\"");
         if let Ok(data) = fetch_by_name(display_name) {
-            log!("[api] Resolved via dict: {display_name}");
+            debug!("[api] Resolved via dict: {display_name}");
             return Ok(data);
         }
     }
@@ -109,7 +109,7 @@ fn dict_lookup(asset_key: &str) -> Option<&'static str> {
 
 fn fetch_by_name(name: &str) -> Result<HeroData, Box<dyn std::error::Error>> {
     let url = format!("https://assets.deadlock-api.com/v2/heroes/by-name/{name}");
-    log!("[api] GET {url}");
+    debug!("[api] GET {url}");
     let hero: ApiHero = reqwest::blocking::get(&url)?.json()?;
     let images = hero.images.ok_or("hero not found")?;
     Ok(HeroData {

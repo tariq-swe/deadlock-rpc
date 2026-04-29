@@ -1,14 +1,14 @@
-use crate::log;
+use log::{info, warn};
 #[cfg(not(debug_assertions))]
 use std::path::PathBuf;
 
 const DEADLOCK_APP_ID: &str = "1422450";
 
 pub fn launch_deadlock() {
-    log!("[launcher] Launching Deadlock with -condebug...");
+    info!("[launcher] Launching Deadlock with -condebug...");
     match launch_via_steam() {
-        Ok(_) => log!("[launcher] Steam launch initiated."),
-        Err(e) => log!("[launcher] Failed to launch Deadlock: {e}"),
+        Ok(_) => info!("[launcher] Steam launch initiated."),
+        Err(e) => warn!("[launcher] Failed to launch Deadlock: {e}"),
     }
 }
 
@@ -16,7 +16,7 @@ pub fn launch_deadlock() {
 fn launch_via_steam() -> std::io::Result<()> {
     let steam = crate::steam::steam_exe_path()
         .unwrap_or_else(|| std::path::PathBuf::from("steam"));
-    log!("[launcher] Using Steam executable: {}", steam.display());
+    info!("[launcher] Using Steam executable: {}", steam.display());
     std::process::Command::new(steam)
         .args(["-applaunch", DEADLOCK_APP_ID, "-condebug"])
         .stdout(std::process::Stdio::null())
@@ -42,7 +42,7 @@ pub fn install_shortcut() {
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
-            log!("[install] Could not determine executable path: {e}");
+            warn!("[install] Could not determine executable path: {e}");
             return;
         }
     };
@@ -50,24 +50,24 @@ pub fn install_shortcut() {
     let path = match shortcut_path(&exe) {
         Some(p) => p,
         None => {
-            log!("[install] Could not determine shortcut path");
+            warn!("[install] Could not determine shortcut path");
             return;
         }
     };
 
     if path.exists() {
-        log!("[install] Shortcut already exists, skipping");
+        info!("[install] Shortcut already exists, skipping");
         return;
     }
 
     if !prompt_shortcut() {
-        log!("[install] User declined shortcut creation");
+        info!("[install] User declined shortcut creation");
         return;
     }
 
     match install_platform_shortcut(&exe) {
-        Ok(dest) => log!("[install] Shortcut created: {}", dest.display()),
-        Err(e) => log!("[install] Failed to create shortcut: {e}"),
+        Ok(dest) => info!("[install] Shortcut created: {}", dest.display()),
+        Err(e) => warn!("[install] Failed to create shortcut: {e}"),
     }
 }
 

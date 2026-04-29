@@ -22,3 +22,5 @@ toml = { version = "0.8", features = ["parse"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 notify-rust = "4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+log = "0.4"
+simplelog = "0.12"

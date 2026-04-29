@@ -26,6 +26,7 @@
 - **Match mode detection** — Standard, Street Brawl, Training Range, and more
 - **Auto-launch** — launches Deadlock with the required flag automatically
 - **Auto-exit** — closes itself when you close Deadlock
+- **Statlocker button** — optional clickable button on your presence card linking to your match history on [statlocker.gg](https://statlocker.gg)
 - **Customizable** — presence text, timer, hero display, poll rate, and more via `config.toml`
 
 ## Installation
@@ -76,6 +77,7 @@ On first run a **`config.toml`** is created next to the executable with all opti
 |-----|---------|-------------|
 | `presence.show_elapsed_timer` | `true` | Show the elapsed time counter. |
 | `presence.show_hero` | `true` | Show the hero image and name. |
+| `presence.show_statlocker_button` | `false` | Show a "View on Statlocker" button linking to your match history. Only visible to other Discord users, not yourself. |
 | `presence.details_with_hero` | `"Playing as {hero}"` | Top line when a hero is known. |
 | `presence.details_no_hero` | `"{phase}"` | Top line when no hero is known. |
 
