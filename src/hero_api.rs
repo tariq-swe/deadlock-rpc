@@ -21,14 +21,18 @@ struct ApiImages {
     icon_hero_card: Option<String>,
 }
 
-#[derive(Default)]
 pub struct HeroCache {
     map: HashMap<String, HeroData>,
+    client: reqwest::blocking::Client,
 }
 
 impl HeroCache {
     pub fn new() -> Self {
-        Self::default()
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .expect("failed to build HTTP client");
+        Self { map: HashMap::new(), client }
     }
 
     /// Returns cached data if available, otherwise fetches from the API using the hero class_name.
@@ -36,7 +40,7 @@ impl HeroCache {
         use std::collections::hash_map::Entry;
         match self.map.entry(hero_key.to_owned()) {
             Entry::Occupied(e) => Some(e.into_mut()),
-            Entry::Vacant(e) => match fetch(hero_key) {
+            Entry::Vacant(e) => match fetch(&self.client, hero_key) {
                 Ok(data) => {
                     info!("[api] Cached: {} → \"{}\"", hero_key, data.name);
                     Some(e.insert(data))
@@ -50,23 +54,23 @@ impl HeroCache {
     }
 }
 
-fn fetch(hero_key: &str) -> Result<HeroData, Box<dyn std::error::Error>> {
+fn fetch(client: &reqwest::blocking::Client, hero_key: &str) -> Result<HeroData, Box<dyn std::error::Error>> {
     debug!("[api] Fetching: {hero_key}");
 
-    if let Ok(data) = fetch_by_name(hero_key) {
+    if let Ok(data) = fetch_by_name(client, hero_key) {
         debug!("[api] Resolved via full key: {hero_key}");
         return Ok(data);
     }
 
     let stripped = hero_key.trim_start_matches("hero_");
-    if let Ok(data) = fetch_by_name(stripped) {
+    if let Ok(data) = fetch_by_name(client, stripped) {
         debug!("[api] Resolved via stripped key: {stripped}");
         return Ok(data);
     }
 
     if let Some(display_name) = dict_lookup(hero_key) {
         debug!("[api] Dict fallback: {hero_key} → \"{display_name}\"");
-        if let Ok(data) = fetch_by_name(display_name) {
+        if let Ok(data) = fetch_by_name(client, display_name) {
             debug!("[api] Resolved via dict: {display_name}");
             return Ok(data);
         }
@@ -107,10 +111,10 @@ fn dict_lookup(asset_key: &str) -> Option<&'static str> {
     }
 }
 
-fn fetch_by_name(name: &str) -> Result<HeroData, Box<dyn std::error::Error>> {
+fn fetch_by_name(client: &reqwest::blocking::Client, name: &str) -> Result<HeroData, Box<dyn std::error::Error>> {
     let url = format!("https://assets.deadlock-api.com/v2/heroes/by-name/{name}");
     debug!("[api] GET {url}");
-    let hero: ApiHero = reqwest::blocking::get(&url)?.json()?;
+    let hero: ApiHero = client.get(&url).send()?.json()?;
     let images = hero.images.ok_or("hero not found")?;
     Ok(HeroData {
         name: hero.name.unwrap_or_else(|| name.trim_start_matches("hero_").to_string()),
