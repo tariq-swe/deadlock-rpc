@@ -15,6 +15,7 @@ struct Release {
 struct Asset {
     name: String,
     browser_download_url: String,
+    digest: Option<String>,
 }
 
 fn is_newer(tag: &str) -> bool {
@@ -27,6 +28,18 @@ fn is_newer(tag: &str) -> bool {
         (n(&mut p), n(&mut p), n(&mut p))
     };
     parse(tag) > parse(CURRENT_VERSION)
+}
+
+fn verify_sha256(data: &[u8], digest: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use sha2::{Digest, Sha256};
+    let expected = digest
+        .strip_prefix("sha256:")
+        .ok_or("asset digest has unexpected format (expected \"sha256:<hex>\")")?;
+    let actual = format!("{:x}", Sha256::digest(data));
+    if actual != expected {
+        return Err(format!("SHA-256 mismatch — expected {expected}, got {actual}").into());
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -162,10 +175,17 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("release asset not found for this platform")?;
 
     info!("[updater] Downloading {}", asset.browser_download_url);
-    notify("Downloading and installing update, launching shortly...");
 
     let zip_bytes = client.get(&asset.browser_download_url).send()?.bytes()?;
-    info!("[updater] Downloaded {} bytes, extracting...", zip_bytes.len());
+    info!("[updater] Downloaded {} bytes, verifying checksum...", zip_bytes.len());
+
+    let digest = asset
+        .digest
+        .as_deref()
+        .ok_or("release asset has no digest; refusing to install unverified update")?;
+    verify_sha256(&zip_bytes, digest)?;
+    info!("[updater] Checksum verified ok");
+    notify("Downloading and installing update, launching shortly...");
 
     let new_binary = extract_binary(&zip_bytes)?;
     info!("[updater] Extracted binary ({} bytes), writing to disk...", new_binary.len());

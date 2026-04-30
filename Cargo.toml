@@ -24,3 +24,4 @@ notify-rust = "4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 log = "0.4"
 simplelog = "0.12"
+sha2 = { version = "0.10", default-features = false, features = ["std"] }
