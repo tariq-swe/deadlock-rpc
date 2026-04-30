@@ -18,20 +18,25 @@ struct Patterns {
     loop_mode_menu: Regex,
     change_game_state: Regex,
     precaching_heroes: Regex,
+
     // Match lifecycle
     lobby_created: Regex,
     lobby_destroyed: Regex,
     spectate_broadcast: Regex,
+
     // Server connection
     server_connect: Regex,
     server_disconnect: Regex,
     server_shutdown: Regex,
+
     // Hero signals
     loaded_hero: Regex,
     client_hero_vmdl: Regex,
+
     // Match mode inference
     player_info: Regex,
     bot_init: Regex,
+    
     // Party tracking
     hideout_lobby_state: Regex,
     party_event: Regex,
@@ -64,14 +69,14 @@ impl Patterns {
     }
 }
 
-/// Seconds of log silence during an active match before assuming a crash.
-/// Only applied during InMatch/MatchIntro — passive phases (menu, hideout, queue)
-/// produce very little log output and would cause false positives for AFK users.
+// Seconds of log silence during an active match before assuming a crash.
+// Only applied during InMatch/MatchIntro — passive phases (menu, hideout, queue)
+// produce very little log output and would cause false positives for AFK users.
 const MATCH_STALE_SECS: u64 = 300;
 
 pub struct LogWatcher {
     log_path: PathBuf,
-    /// Milliseconds between log file polls (from config).
+    // Milliseconds between log file polls (from config).
     poll_interval_ms: u64,
 }
 
@@ -189,11 +194,11 @@ impl LogWatcher {
     }
 }
 
-/// Opens the log file, seeks to `offset`, and returns all complete lines from that point.
-/// If `skip_partial` is true, discards the first (potentially incomplete) line after seeking.
-///
-/// Uses `from_utf8_lossy` to replace invalid bytes (e.g. non-ASCII player names) with
-/// U+FFFD rather than stopping iteration — equivalent to Python's `errors="replace"`.
+// Opens the log file, seeks to `offset`, and returns all complete lines from that point.
+// If `skip_partial` is true, discards the first (potentially incomplete) line after seeking.
+//
+// Uses `from_utf8_lossy` to replace invalid bytes (e.g. non-ASCII player names) with
+// U+FFFD rather than stopping iteration — equivalent to Python's `errors="replace"`.
 fn read_lines_from(path: &std::path::Path, offset: u64, skip_partial: bool) -> Vec<String> {
     let Ok(mut file) = std::fs::File::open(path) else {
         return Vec::new();
@@ -212,8 +217,8 @@ fn read_lines_from(path: &std::path::Path, offset: u64, skip_partial: bool) -> V
     lines.map(str::to_owned).collect()
 }
 
-/// Normalise a raw hero key from the log: lowercase, strip version suffix (_v2, _v3, …),
-/// and ensure a hero_ prefix so the result is always a valid API class_name.
+// Normalise a raw hero key from the log: lowercase, strip version suffix (_v2, _v3, …),
+// and ensure a hero_ prefix so the result is always a valid API class_name.
 fn normalize_hero_key(raw: &str) -> String {
     let s = raw.to_lowercase();
     // Strip trailing version suffix
@@ -230,8 +235,8 @@ fn normalize_hero_key(raw: &str) -> String {
     if s.starts_with("hero_") { s } else { format!("hero_{s}") }
 }
 
-/// Finalise match mode once we have both a map name and a stable player count.
-/// Only acts when mode is still Unknown — safe to call multiple times.
+// Finalise match mode once we have both a map name and a stable player count.
+// Only acts when mode is still Unknown — safe to call multiple times.
 fn try_infer_mode(state: &mut GameState) {
     if state.match_mode != MatchMode::Unknown || state.pending_player_count == 0 {
         return;
@@ -294,9 +299,9 @@ fn apply_map(state: &mut GameState, map_name: &str) {
     }
 }
 
-/// Scans the buffered log lines in reverse to find and log the last raw signal
-/// for each key RPC field (map, phase, match mode, hero). Run before replay so
-/// the derived state can be cross-checked against what was actually seen in the log.
+// Scans the buffered log lines in reverse to find and log the last raw signal
+// for each key RPC field (map, phase, match mode, hero). Run before replay so
+// the derived state can be cross-checked against what was actually seen in the log.
 fn log_last_instances(lines: &[String], p: &Patterns) {
     let mut found_map = false;
     let mut found_phase = false;
@@ -381,8 +386,8 @@ fn log_last_instances(lines: &[String], p: &Patterns) {
 
 // ── Event dispatch ────────────────────────────────────────────────────────────
 
-/// Parsed representation of a single exclusive log event.
-/// `parse_event` produces this; `apply_event` consumes it.
+// Parsed representation of a single exclusive log event.
+// `parse_event` produces this; `apply_event` consumes it.
 enum Event {
     MapCreated(String),
     MapInfo(String),
@@ -406,8 +411,8 @@ enum Event {
     BotInit,
 }
 
-/// Pure pattern match: returns the first exclusive event found in `line`, or `None`.
-/// No state is read or written here — only the line text and compiled patterns are used.
+// Pure pattern match: returns the first exclusive event found in `line`, or `None`.
+// No state is read or written here — only the line text and compiled patterns are used.
 fn parse_event(line: &str, p: &Patterns) -> Option<Event> {
     if let Some(m) = p.map_created_physics.captures(line) {
         return Some(Event::MapCreated(m[1].to_owned()));
@@ -479,7 +484,7 @@ fn parse_event(line: &str, p: &Patterns) -> Option<Event> {
     None
 }
 
-/// Applies a parsed event to the game state.
+// Applies a parsed event to the game state.
 fn apply_event(event: Event, state: &mut GameState, is_hideout_map: bool) {
     match event {
         Event::MapCreated(map) => {

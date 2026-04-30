@@ -95,9 +95,9 @@ fn build_activity<'a>(
     act
 }
 
-/// Binds a local port to prevent multiple instances running simultaneously.
-/// The OS releases the port automatically when the process exits.
-/// Returns None if another instance already holds the port.
+// Binds a local port to prevent multiple instances running simultaneously.
+// The OS releases the port automatically when the process exits.
+// Returns None if another instance already holds the port.
 fn try_acquire_single_instance_lock() -> Option<std::net::TcpListener> {
     std::net::TcpListener::bind("127.0.0.1:47782").ok()
 }

@@ -12,33 +12,25 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct GeneralConfig {
-    /// Launch Deadlock automatically when deadlock-rpc starts.
-    /// The --no-launch CLI flag overrides this to false for a single run.
     pub auto_launch: bool,
-    /// Exit deadlock-rpc when the game closes.
     pub auto_exit: bool,
-    /// Milliseconds between game log polls.
-    pub log_poll_interval_ms: u64,
-    /// Seconds between Discord presence refreshes.
-    pub presence_update_interval_s: u64,
+    pub log_poll_interval_ms: u64, // milliseconds between game log polls
+    pub presence_update_interval_s: u64, // seconds between Discord presence refreshes
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct PresenceConfig {
-    /// Show the elapsed session timer in Discord.
     pub show_elapsed_timer: bool,
-    /// Show the hero icon and "Playing as" text.
-    /// When false, the Deadlock logo is always shown.
-    pub show_hero: bool,
-    /// Show a "View on Statlocker" button linking to the user's match history.
-    /// Requires the Steam ID to be detected from the game log first.
+    pub show_hero: bool, // show hero image and name in rpc; deadlock logo will be shown if false
     pub show_statlocker_button: bool,
-    /// Top "details" line when a hero is known.
-    /// Variables: {hero}
+
+    // Top "details" line when a hero is known.
+    // Variables: {hero}
     pub details_with_hero: String,
-    /// Top "details" line when no hero is known.
-    /// Variables: {phase}
+
+    // Top "details" line when no hero is known.
+    // Variables: {phase}
     pub details_no_hero: String,
     pub status: StatusStrings,
 }
@@ -48,15 +40,19 @@ pub struct PresenceConfig {
 pub struct StatusStrings {
     pub not_running: String,
     pub main_menu: String,
-    /// Hideout fallback — used when the API provides no hero-specific text.
-    /// Variables: {hero}
+
+    // Hideout fallback — used when the API provides no hero-specific text.
+    // Variables: {hero}
     pub in_hideout: String,
     pub in_queue: String,
-    /// Variables: {mode}
+
+    // Variables: {mode}
     pub match_intro: String,
-    /// Variables: {mode}, {location}
+
+    // Variables: {mode}, {location}
     pub in_match: String,
-    /// The value substituted for {location} in in_match.
+
+    // The value substituted for {location} in in_match.
     pub in_match_location: String,
     pub post_match: String,
     pub spectating: String,
@@ -65,14 +61,10 @@ pub struct StatusStrings {
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct ImagesConfig {
-    /// Discord asset key for the large image when no hero image is available.
-    pub default_large_image: String,
-    /// Hover text for the large image when no hero is shown.
-    pub default_large_text: String,
-    /// Discord asset key for the small corner image.
-    pub small_image: String,
-    /// Hover text for the small corner image.
-    pub small_text: String,
+    pub default_large_image: String, // Discord asset key for the large image when no hero image is available.
+    pub default_large_text: String, // Hover text for the large image when no hero is shown.
+    pub small_image: String, // Discord asset key for the small corner image.
+    pub small_text: String, // Hover text for the small corner image.
 }
 
 impl Default for GeneralConfig {
@@ -126,8 +118,8 @@ impl Default for ImagesConfig {
     }
 }
 
-/// Replaces all `{key}` placeholders in `template` with their corresponding values.
-/// Unrecognised placeholders are left as-is.
+// Replaces all `{key}` placeholders in `template` with their corresponding values.
+// Unrecognised placeholders are left as-is.
 pub fn apply_vars(template: &str, vars: &[(&str, &str)]) -> String {
     let mut result = template.to_string();
     for (key, value) in vars {
@@ -144,11 +136,11 @@ fn config_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("config.toml"))
 }
 
-/// Load config from `config.toml` next to the executable.
-///
-/// - If the file does not exist: write a fully-documented default and return defaults.
-/// - If the file is malformed: log a warning and return defaults without overwriting.
-/// - If the file is a valid partial config: unset fields fall back to their defaults.
+// Load config from `config.toml` next to the executable.
+//
+// - If the file does not exist: write a fully-documented default and return defaults.
+// - If the file is malformed: log a warning and return defaults without overwriting.
+// - If the file is a valid partial config: unset fields fall back to their defaults.
 pub fn load() -> Config {
     let path = config_path();
 

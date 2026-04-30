@@ -56,7 +56,7 @@ impl GamePhase {
         }
     }
 
-    /// Whether the hero image and "Playing as" label should be shown for this phase.
+    // Whether the hero image and "Playing as" label should be shown for this phase.
     pub fn shows_hero(self) -> bool {
         !matches!(
             self,
@@ -71,6 +71,7 @@ pub struct GameState {
     pub hero_key: Option<String>,
     pub map_name: Option<String>,
     pub party_size: u8,
+    
     // internal tracking
     pub(crate) hero_window_open: bool,
     pub(crate) hideout_loaded: bool,
@@ -179,11 +180,11 @@ impl GameState {
         self.hero_window_open = true;
     }
 
-    /// Returns the Discord presence status line for the current phase.
-    ///
-    /// - `hideout_text`: hero-specific text from the API (takes priority in Hideout phase).
-    /// - `hero_name`: display name of the current hero (used as `{hero}` variable).
-    /// - `cfg`: per-phase string templates from the loaded config.
+    // Returns the Discord presence status line for the current phase.
+    //
+    // - `hideout_text`: hero-specific text from the API (takes priority in Hideout phase).
+    // - `hero_name`: display name of the current hero (used as `{hero}` variable).
+    // - `cfg`: per-phase string templates from the loaded config.
     pub fn presence_status(
         &self,
         hideout_text: Option<&str>,

@@ -1,6 +1,6 @@
-/// Load the icon PNG from the assets directory, returning raw RGBA bytes.
-/// Checks next to the executable first (release), then the current working
-/// directory (development via `cargo run`).
+// Load the icon PNG from the assets directory, returning raw RGBA bytes.
+// Checks next to the executable first (release), then the current working
+// directory (development via `cargo run`).
 fn load_rgba() -> Option<(Vec<u8>, u32, u32)> {
     let candidates = [
         std::env::current_exe()
@@ -16,8 +16,8 @@ fn load_rgba() -> Option<(Vec<u8>, u32, u32)> {
     Some((img.into_raw(), w, h))
 }
 
-/// Spawns the system tray icon and blocks forever.
-/// The only way out is the user clicking Quit, which calls process::exit.
+// Spawns the system tray icon and blocks forever.
+// The only way out is the user clicking Quit, which calls process::exit.
 pub fn run() {
     #[cfg(target_os = "linux")]
     linux::run();
@@ -25,8 +25,6 @@ pub fn run() {
     #[cfg(not(target_os = "linux"))]
     windows::run();
 }
-
-// ── Linux ─────────────────────────────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -109,8 +107,6 @@ mod linux {
         }
     }
 }
-
-// ── Windows ───────────────────────────────────────────────────────────────────
 
 #[cfg(not(target_os = "linux"))]
 mod windows {

@@ -35,7 +35,7 @@ impl HeroCache {
         Self { map: HashMap::new(), client }
     }
 
-    /// Returns cached data if available, otherwise fetches from the API using the hero class_name.
+    // Returns cached data if available, otherwise fetches from the API using the hero class_name.
     pub fn get_or_fetch(&mut self, hero_key: &str) -> Option<&HeroData> {
         use std::collections::hash_map::Entry;
         match self.map.entry(hero_key.to_owned()) {
@@ -79,7 +79,7 @@ fn fetch(client: &reqwest::blocking::Client, hero_key: &str) -> Result<HeroData,
     Err(format!("unknown hero: {hero_key}").into())
 }
 
-/// Maps asset_key → display name to query the API with (e.g. "hero_geist" → "Lady Geist").
+// Maps asset_key → display name to query the API with (e.g. "hero_geist" → "Lady Geist").
 fn dict_lookup(asset_key: &str) -> Option<&'static str> {
     match asset_key {
         "hero_inferno"  => Some("Infernus"),
