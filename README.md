@@ -59,59 +59,61 @@ No game memory is read, no files are modified, and no network traffic is interce
 <details>
 <summary><strong>Customization</strong></summary>
 
-On first run a **`config.toml`** is created next to the executable with all options documented. Edit it with any text editor — changes take effect on the next launch. Any key you omit falls back to its default.
+On first run a **`config.toml`** is created next to the executable with all options and their defaults. Edit it with any text editor — changes take effect on the next launch. Any key you omit falls back to its default, and any key added in a new release is automatically written to your file with its default value.
+
+> [!WARNING]
+> Occasionally a release may rename or restructure config keys. When that happens, your old values under the renamed keys will no longer take effect and the new keys will be added with their defaults. Check the release notes before updating if you have customized your config, and re-apply any settings that changed.
 
 ### General
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `general.auto_launch` | `true` | Launch Deadlock on startup. |
-| `general.auto_exit` | `true` | Exit when the game closes. |
-| `general.launch_timeout_s` | `120` | Seconds to wait for the game to appear after launch. |
-| `general.log_poll_interval_ms` | `500` | How often (ms) to check the game log. Lower = faster updates. |
-| `general.presence_update_interval_s` | `5` | How often (seconds) to refresh the Discord presence card. |
+| `general.launch_game_on_start` | `true` | Launch Deadlock on startup. |
+| `general.exit_when_game_closes` | `true` | Exit when the game closes. |
+| `general.game_log_poll_interval_ms` | `500` | How often (ms) to check the game log. Lower = faster updates. |
+| `general.discord_update_interval_s` | `5` | How often (seconds) to refresh the Discord presence card. |
 
 ### Presence
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `presence.show_elapsed_timer` | `true` | Show the elapsed time counter. |
-| `presence.show_hero` | `true` | Show the hero image and name. |
+| `presence.show_hero_image` | `true` | Show the hero image and name. |
 | `presence.show_statlocker_button` | `false` | Show a "View on Statlocker" button linking to your match history. Only visible to other Discord users, not yourself. |
 | `presence.details_with_hero` | `"Playing as {hero}"` | Top line when a hero is known. |
-| `presence.details_no_hero` | `"{phase}"` | Top line when no hero is known. |
+| `presence.details_without_hero` | `"{phase}"` | Top line when no hero is known. |
 
 ### Per-phase status strings
 
 | Key | Default |
 |-----|---------|
-| `presence.status.not_running` | `"Not Running"` |
-| `presence.status.main_menu` | `"Browsing the Main Menu"` |
+| `presence.status.game_not_running` | `"Not Running"` |
+| `presence.status.in_main_menu` | `"Browsing the Main Menu"` |
 | `presence.status.in_hideout` | `"In the Hideout"` |
-| `presence.status.in_queue` | `"Searching for a Match..."` |
-| `presence.status.match_intro` | `"{mode} • Loading into Match"` |
-| `presence.status.in_match` | `"{mode} • Battling in {location}"` |
-| `presence.status.in_match_location` | `"the Cursed Apple"` |
+| `presence.status.in_matchmaking` | `"Searching for a Match..."` |
+| `presence.status.loading_into_match` | `"{mode} • Loading into Match"` |
+| `presence.status.in_match` | `"In Match: {mode}"` |
+| `presence.status.match_location_label` | `"the Cursed Apple"` |
 | `presence.status.post_match` | `"Reviewing Match Results"` |
-| `presence.status.spectating` | `"Watching a Match"` |
+| `presence.status.spectating` | `"Spectating a Match"` |
 
 ### Images
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `images.default_large_image` | `"deadlock_logo"` | Large image asset when no hero is shown. |
-| `images.default_large_text` | `"Deadlock"` | Tooltip for the large image. |
-| `images.small_image` | `"deadlock_logo"` | Small corner overlay image asset. |
-| `images.small_text` | `"Deadlock"` | Tooltip for the small image. |
+| `images.fallback_large_image` | `"deadlock_logo"` | Large image asset when no hero is shown. |
+| `images.fallback_large_image_tooltip` | `"Deadlock"` | Tooltip for the large image. |
+| `images.corner_image` | `"deadlock_logo"` | Small corner overlay image asset. |
+| `images.corner_image_tooltip` | `"Deadlock"` | Tooltip for the small corner image. |
 
 ### Template variables
 
 | Variable | Available in | Value |
 |----------|-------------|-------|
 | `{hero}` | `details_with_hero`, `in_hideout` | Hero display name, e.g. `Vindicta` |
-| `{phase}` | `details_no_hero` | Phase label, e.g. `Post Match` |
-| `{mode}` | `match_intro`, `in_match` | Match mode, e.g. `Standard Match` |
-| `{location}` | `in_match` | Value of `in_match_location` |
+| `{phase}` | `details_without_hero` | Phase label, e.g. `Post Match` |
+| `{mode}` | `loading_into_match`, `in_match` | Match mode, e.g. `Standard Match` |
+| `{location}` | `in_match` | Value of `match_location_label` |
 
 ### Examples
 
@@ -120,16 +122,16 @@ On first run a **`config.toml`** is created next to the executable with all opti
 [presence]
 show_elapsed_timer = false
 details_with_hero  = "Playing Deadlock"
-details_no_hero    = "Playing Deadlock"
+details_without_hero = "Playing Deadlock"
 
 # Custom in-match status
 [presence.status]
 in_match = "Grinding {mode}"
-in_queue = "Waiting for a game..."
+in_matchmaking = "Waiting for a game..."
 
 # Keep the app open after the game closes
 [general]
-auto_exit = false
+exit_when_game_closes = false
 ```
 
 </details>

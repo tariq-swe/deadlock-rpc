@@ -56,7 +56,7 @@ impl GamePhase {
         }
     }
 
-    /// Whether the hero image and "Playing as" label should be shown for this phase.
+    // Whether the hero image and "Playing as" label should be shown for this phase.
     pub fn shows_hero(self) -> bool {
         !matches!(
             self,
@@ -71,6 +71,7 @@ pub struct GameState {
     pub hero_key: Option<String>,
     pub map_name: Option<String>,
     pub party_size: u8,
+    
     // internal tracking
     pub(crate) hero_window_open: bool,
     pub(crate) hideout_loaded: bool,
@@ -179,11 +180,11 @@ impl GameState {
         self.hero_window_open = true;
     }
 
-    /// Returns the Discord presence status line for the current phase.
-    ///
-    /// - `hideout_text`: hero-specific text from the API (takes priority in Hideout phase).
-    /// - `hero_name`: display name of the current hero (used as `{hero}` variable).
-    /// - `cfg`: per-phase string templates from the loaded config.
+    // Returns the Discord presence status line for the current phase.
+    //
+    // - `hideout_text`: hero-specific text from the API (takes priority in Hideout phase).
+    // - `hero_name`: display name of the current hero (used as `{hero}` variable).
+    // - `cfg`: per-phase string templates from the loaded config.
     pub fn presence_status(
         &self,
         hideout_text: Option<&str>,
@@ -192,8 +193,8 @@ impl GameState {
     ) -> String {
         use crate::config::apply_vars;
         match self.phase {
-            GamePhase::NotRunning => cfg.not_running.clone(),
-            GamePhase::MainMenu => cfg.main_menu.clone(),
+            GamePhase::NotRunning => cfg.game_not_running.clone(),
+            GamePhase::MainMenu => cfg.in_main_menu.clone(),
             GamePhase::Hideout => {
                 if let Some(text) = hideout_text.filter(|t| !t.is_empty()) {
                     text.to_string()
@@ -201,16 +202,16 @@ impl GameState {
                     apply_vars(&cfg.in_hideout, &[("hero", hero_name.unwrap_or(""))])
                 }
             }
-            GamePhase::InQueue => cfg.in_queue.clone(),
+            GamePhase::InQueue => cfg.in_matchmaking.clone(),
             GamePhase::MatchIntro => {
-                apply_vars(&cfg.match_intro, &[("mode", self.match_mode.display())])
+                apply_vars(&cfg.loading_into_match, &[("mode", self.match_mode.display())])
             }
             GamePhase::InMatch => {
                 let mode = self.match_mode.display();
                 if self.match_mode.show_map_location() {
                     apply_vars(
                         &cfg.in_match,
-                        &[("mode", mode), ("location", &cfg.in_match_location)],
+                        &[("mode", mode), ("location", &cfg.match_location_label)],
                     )
                 } else {
                     mode.to_string()

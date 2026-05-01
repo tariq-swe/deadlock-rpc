@@ -57,17 +57,17 @@ fn build_activity<'a>(
     let large_image = hero_data
         .filter(|d| !d.icon_url.is_empty())
         .map(|d| d.icon_url.as_str())
-        .unwrap_or(img_cfg.default_large_image.as_str());
+        .unwrap_or(img_cfg.fallback_large_image.as_str());
 
     let large_text = hero_data
         .map(|d| d.name.as_str())
-        .unwrap_or(img_cfg.default_large_text.as_str());
+        .unwrap_or(img_cfg.fallback_large_image_tooltip.as_str());
 
     let assets = activity::Assets::new()
         .large_image(large_image)
         .large_text(large_text)
-        .small_image(img_cfg.small_image.as_str())
-        .small_text(img_cfg.small_text.as_str());
+        .small_image(img_cfg.corner_image.as_str())
+        .small_text(img_cfg.corner_image_tooltip.as_str());
 
     let mut act = activity::Activity::new()
         .details(details)
@@ -95,9 +95,9 @@ fn build_activity<'a>(
     act
 }
 
-/// Binds a local port to prevent multiple instances running simultaneously.
-/// The OS releases the port automatically when the process exits.
-/// Returns None if another instance already holds the port.
+// Binds a local port to prevent multiple instances running simultaneously.
+// The OS releases the port automatically when the process exits.
+// Returns None if another instance already holds the port.
 fn try_acquire_single_instance_lock() -> Option<std::net::TcpListener> {
     std::net::TcpListener::bind("127.0.0.1:47782").ok()
 }
@@ -120,7 +120,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
 
-    let update_interval = Duration::from_secs(cfg.general.presence_update_interval_s);
+    let update_interval = Duration::from_secs(cfg.general.discord_update_interval_s);
 
     loop {
         let (phase, match_mode, hero_key, party_size, map_name, account_id) = {
@@ -132,7 +132,7 @@ fn run_rpc_loop(state: Arc<Mutex<GameState>>, cfg: config::Config) {
             game_was_running = true;
         } else if game_was_running {
             info!("[deadlock-rpc] Game closed.");
-            if cfg.general.auto_exit {
+            if cfg.general.exit_when_game_closes {
                 exit_discord(&mut client);
 std::process::exit(0);
             }
@@ -146,7 +146,7 @@ std::process::exit(0);
 
         // Respect show_hero: if disabled, never pass hero data for display.
         let effective_hero_data: Option<&HeroData> =
-            if cfg.presence.show_hero && phase.shows_hero() {
+            if cfg.presence.show_hero_image && phase.shows_hero() {
                 hero_key.as_deref().and_then(|k| hero_cache.get_or_fetch(k))
             } else {
                 None
@@ -166,7 +166,7 @@ std::process::exit(0);
         let hero_label: String = match hero_name {
             Some(name) => config::apply_vars(&cfg.presence.details_with_hero, &[("hero", name)]),
             None => config::apply_vars(
-                &cfg.presence.details_no_hero,
+                &cfg.presence.details_without_hero,
                 &[("phase", phase.description())],
             ),
         };
@@ -250,7 +250,7 @@ fn main() {
 
     let no_launch_flag = args.iter().any(|a| a == "--no-launch");
     // --no-launch CLI flag always overrides auto_launch, even if config enables it.
-    let no_launch = no_launch_flag || !cfg.general.auto_launch;
+    let no_launch = no_launch_flag || !cfg.general.launch_game_on_start;
 
     if instance_lock.is_none() {
         if !no_launch_flag {
@@ -278,7 +278,7 @@ fn main() {
 
     {
         let state = Arc::clone(&state);
-        let poll_ms = cfg.general.log_poll_interval_ms;
+        let poll_ms = cfg.general.game_log_poll_interval_ms;
         thread::spawn(move || LogWatcher::new(log_path, poll_ms).run(state));
     }
 

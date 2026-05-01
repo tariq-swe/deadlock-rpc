@@ -15,6 +15,7 @@ struct Release {
 struct Asset {
     name: String,
     browser_download_url: String,
+    digest: Option<String>,
 }
 
 fn is_newer(tag: &str) -> bool {
@@ -27,6 +28,18 @@ fn is_newer(tag: &str) -> bool {
         (n(&mut p), n(&mut p), n(&mut p))
     };
     parse(tag) > parse(CURRENT_VERSION)
+}
+
+fn verify_sha256(data: &[u8], digest: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use sha2::{Digest, Sha256};
+    let expected = digest
+        .strip_prefix("sha256:")
+        .ok_or("asset digest has unexpected format (expected \"sha256:<hex>\")")?;
+    let actual = format!("{:x}", Sha256::digest(data));
+    if actual != expected {
+        return Err(format!("SHA-256 mismatch — expected {expected}, got {actual}").into());
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -67,8 +80,8 @@ fn notify(body: &str) {
 #[cfg(windows)]
 fn notify(_body: &str) {}
 
-/// Debug-only: simulates an update prompt for v99.9.9, fake-downloads, then
-/// re-execs the binary without `--simulate-update` to mimic a post-update launch.
+// Debug-only: simulates an update prompt for v99.9.9, fake-downloads, then
+// re-execs the binary without `--simulate-update` to mimic a post-update launch.
 #[cfg(debug_assertions)]
 pub fn simulate_update() {
     const FAKE_VERSION: &str = "99.9.9";
@@ -115,10 +128,10 @@ pub fn simulate_update() {
     }
 }
 
-/// Called at startup before anything else. If a newer release exists the user
-/// is prompted. If they accept, the update is downloaded, applied, and the
-/// process is replaced (Linux: exec, Windows: PowerShell swap + exit).
-/// Any error is logged and startup continues normally.
+// Called at startup before anything else. If a newer release exists the user
+// is prompted. If they accept, the update is downloaded, applied, and the
+// process is replaced (Linux: exec, Windows: PowerShell swap + exit).
+// Any error is logged and startup continues normally.
 pub fn check_on_startup() {
     if let Err(e) = try_check() {
         warn!("[updater] Check failed: {e}");
@@ -162,10 +175,17 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("release asset not found for this platform")?;
 
     info!("[updater] Downloading {}", asset.browser_download_url);
-    notify("Downloading and installing update, launching shortly...");
 
     let zip_bytes = client.get(&asset.browser_download_url).send()?.bytes()?;
-    info!("[updater] Downloaded {} bytes, extracting...", zip_bytes.len());
+    info!("[updater] Downloaded {} bytes, verifying checksum...", zip_bytes.len());
+
+    let digest = asset
+        .digest
+        .as_deref()
+        .ok_or("release asset has no digest; refusing to install unverified update")?;
+    verify_sha256(&zip_bytes, digest)?;
+    info!("[updater] Checksum verified ok");
+    notify("Downloading and installing update, launching shortly...");
 
     let new_binary = extract_binary(&zip_bytes)?;
     info!("[updater] Extracted binary ({} bytes), writing to disk...", new_binary.len());
@@ -178,13 +198,11 @@ fn try_check() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// ── Platform-specific prompt ──────────────────────────────────────────────────
-
 const CHANGELOG_URL: &str = "https://github.com/tariq-swe/deadlock-rpc/releases/latest";
 
-/// Blocking Yes/No dialog on Linux — tries zenity (GTK/GNOME) then kdialog (KDE).
-/// Loops if the user clicks "View Changelog" (opens browser, then re-shows the prompt).
-/// Returns true if the user chose to update.
+// Blocking Yes/No dialog on Linux — tries zenity (GTK/GNOME) then kdialog (KDE).
+// Loops if the user clicks "View Changelog" (opens browser, then re-shows the prompt).
+// Returns true if the user chose to update.
 #[cfg(unix)]
 fn prompt_update_linux(new_version: &str) -> bool {
     let text = format!(
@@ -192,7 +210,6 @@ fn prompt_update_linux(new_version: &str) -> bool {
     );
 
     loop {
-        // ── zenity (GNOME/GTK) ────────────────────────────────────────────────
         let zenity_out = std::process::Command::new("zenity")
             .args(["--question", "--title=Deadlock RPC Update"])
             .arg(format!("--text={text}"))
@@ -212,7 +229,6 @@ fn prompt_update_linux(new_version: &str) -> bool {
             return out.status.success();
         }
 
-        // ── kdialog (KDE) — yesnocancel: 0=Yes 1=No 2=Cancel ────────────────
         let kdialog_status = std::process::Command::new("kdialog")
             .args([
                 "--title", "Deadlock RPC Update",
@@ -235,8 +251,8 @@ fn prompt_update_linux(new_version: &str) -> bool {
     }
 }
 
-/// Shows a Yes/No/Cancel message box via the Windows API.
-/// Yes = Update Now, No = Skip, Cancel = View Changelog (opens browser, re-shows dialog).
+// Shows a Yes/No/Cancel message box via the Windows API.
+// Yes = Update Now, No = Skip, Cancel = View Changelog (opens browser, re-shows dialog).
 #[cfg(windows)]
 fn prompt_update_windows(new_version: &str) -> bool {
     use std::ffi::OsStr;
@@ -278,8 +294,6 @@ fn prompt_update_windows(new_version: &str) -> bool {
         }
     }
 }
-
-// ── Platform-specific apply ───────────────────────────────────────────────────
 
 #[cfg(unix)]
 fn apply_update(
