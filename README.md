@@ -56,8 +56,7 @@ Deadlock RPC launches the game with the `-condebug` flag, which causes Deadlock 
 
 No game memory is read, no files are modified, and no network traffic is intercepted. The app is entirely read-only with respect to the game.
 
-<details>
-<summary><strong>Customization</strong></summary>
+### Customization
 
 On first run a **`config.toml`** is created next to the executable with all options and their defaults. Edit it with any text editor — changes take effect on the next launch. Any key you omit falls back to its default, and any key added in a new release is automatically written to your file with its default value.
 
@@ -133,8 +132,6 @@ in_matchmaking = "Waiting for a game..."
 [general]
 exit_when_game_closes = false
 ```
-
-</details>
 
 ## Building from Source
 
