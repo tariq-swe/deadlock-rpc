@@ -18,7 +18,7 @@ regex = "1"
 dirs = "5"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
 serde = { version = "1", features = ["derive"] }
-toml = { version = "0.8", features = ["parse"] }
+toml = { version = "0.8", features = ["parse", "display"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 notify-rust = "4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
