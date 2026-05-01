@@ -5,11 +5,11 @@
 
   Discord Rich Presence for Deadlock — automatically shows your current hero, game state, and match mode on your Discord profile in real time.
 
-  [![Latest Release](https://img.shields.io/github/v/release/tariq-swe/deadlock-rpc?style=flat-square&label=release)](https://github.com/tariq-swe/deadlock-rpc/releases/latest)
-  [![Downloads](https://img.shields.io/github/downloads/tariq-swe/deadlock-rpc/total?style=flat-square)](https://github.com/tariq-swe/deadlock-rpc/releases)
-  [![License](https://img.shields.io/github/license/tariq-swe/deadlock-rpc?style=flat-square)](LICENSE)
-  [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?style=flat-square&logo=rust)](https://www.rust-lang.org)
-  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?style=flat-square)](https://github.com/tariq-swe/deadlock-rpc/releases/latest)
+  [![Latest Release](https://img.shields.io/github/v/release/HeyTariq/deadlock-rpc?&label=release)](https://github.com/HeyTariq/deadlock-rpc/releases/latest)
+  [![Downloads](https://img.shields.io/github/downloads/HeyTariq/deadlock-rpc/total?)](https://github.com/HeyTariq/deadlock-rpc/releases)
+  [![License](https://img.shields.io/github/license/HeyTariq/deadlock-rpc?)](LICENSE)
+  [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?&logo=rust)](https://www.rust-lang.org)
+  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?)](https://github.com/HeyTariq/deadlock-rpc/releases/latest)
 
 </div>
 
@@ -138,7 +138,7 @@ exit_when_game_closes = false
 Requires [Rust](https://rustup.rs) stable.
 
 ```bash
-git clone https://github.com/tariq-swe/deadlock-rpc.git
+git clone https://github.com/HeyTariq/deadlock-rpc.git
 cd deadlock-rpc
 cargo build --release
 ./target/release/deadlock-rpc
