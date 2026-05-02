@@ -98,7 +98,7 @@ impl Default for ImagesConfig {
             fallback_large_image: "deadlock_logo".to_string(),
             fallback_large_image_tooltip: "Deadlock".to_string(),
             corner_image: "deadlock_logo".to_string(),
-            corner_image_tooltip: "Deadlock".to_string(),
+            corner_image_tooltip: "Deadlock RPC".to_string(),
         }
     }
 }
@@ -222,5 +222,5 @@ spectating = "Spectating a Match"
 fallback_large_image = "deadlock_logo"
 fallback_large_image_tooltip = "Deadlock"
 corner_image = "deadlock_logo"
-corner_image_tooltip = "Deadlock"
+corner_image_tooltip = "Deadlock RPC"
 "#;
